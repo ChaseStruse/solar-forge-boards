@@ -119,6 +119,11 @@ function applyTagFilters() {
   if (clearButton) {
     clearButton.hidden = selectedTagFilters.size === 0;
   }
+  const filterCount = document.querySelector(".tag-filter-count");
+  if (filterCount) {
+    filterCount.hidden = selectedTagFilters.size === 0;
+    filterCount.textContent = String(selectedTagFilters.size);
+  }
 }
 
 document.addEventListener("click", (event) => {

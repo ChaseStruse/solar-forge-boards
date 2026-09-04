@@ -28,7 +28,7 @@
         <a class="project-card" href="{{ url_for('ui.project_board', project_id=project.id) }}">
           <h3>{{ project.name }}</h3>
           <p>{{ project.description or "No description yet." }}</p>
-          <span>Open board →</span>
+          <span>{% if project.archived_at %}Archived · View history{% else %}Open board →{% endif %}</span>
         </a>
       {% endfor %}
       </div>

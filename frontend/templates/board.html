@@ -3,7 +3,18 @@
 {% block content %}
 <nav class="breadcrumbs"><a href="{{ url_for('ui.projects_page') }}">Projects</a><span>/</span><span>{{ project.name }}</span></nav>
 <section class="page-heading board-heading">
-  <div><p class="eyebrow">Project board</p><h1>{{ project.name }}</h1><p class="lede">{{ project.description }}</p></div>
+  <div class="board-title"><p class="eyebrow">Project board</p><h1>{{ project.name }}</h1><p class="lede">{{ project.description }}</p></div>
+  <form class="story-search story-search-top" method="get" action="{{ url_for('ui.project_board', project_id=project.id) }}">
+    <input type="hidden" name="tab" value="board">
+    <input type="hidden" name="sort" value="{{ filters.sort }}">
+    <input type="hidden" name="direction" value="{{ filters.direction }}">
+    <label class="sr-only" for="story-search">Search stories</label>
+    <input id="story-search" name="search" value="{{ filters.search or '' }}" maxlength="200" placeholder="Search stories…">
+    <button type="submit">Search</button>
+  </form>
+  {% if project.archived_at %}
+  <div class="archive-notice"><p class="eyebrow">Archived</p><p>This project is read-only. Restore it to plan or change stories.</p><form method="post" action="{{ url_for('ui.restore_project', project_id=project.id) }}"><button type="submit">Restore project</button></form></div>
+  {% else %}
   <details class="story-composer">
     <summary><span aria-hidden="true">＋</span> Forge a story</summary>
     <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) { this.reset(); this.closest('details').removeAttribute('open'); }">
@@ -14,6 +25,7 @@
       <label>Title <input name="title" required maxlength="200" placeholder="What needs to happen?"></label>
       <label>Description <textarea name="description" maxlength="10000" rows="3" placeholder="The user need, context, and intended outcome…"></textarea></label>
       <label>Technical description <textarea name="technical_description" maxlength="20000" rows="4" placeholder="Implementation notes, constraints, APIs, or acceptance details…"></textarea></label>
+      <label>Acceptance criteria <textarea name="acceptance_criteria" rows="4" maxlength="50099" placeholder="One verifiable outcome per line"></textarea><span class="field-note">One clear, verifiable outcome per line.</span></label>
       <label>Repository link <input name="repository_url" type="url" maxlength="2048" placeholder="https://github.com/organization/repository"></label>
       <fieldset class="tag-picker">
         <legend>Tags</legend>
@@ -32,7 +44,13 @@
       </div>
     </form>
   </details>
+  {% endif %}
 </section>
+<nav class="project-tabs" aria-label="Project views">
+  <a class="project-tab {% if active_tab == 'board' %}is-active{% endif %}" href="{{ url_for('ui.project_board', project_id=project.id) }}">Board</a>
+  <a class="project-tab {% if active_tab == 'activity' %}is-active{% endif %}" href="{{ url_for('ui.project_board', project_id=project.id, tab='activity') }}">Activity</a>
+</nav>
+{% if active_tab == 'board' %}
 <section class="board-toolbar view-system" data-project-id="{{ project.id }}" aria-label="Board view and filter controls">
   <div class="toolbar-section toolbar-views">
     <span class="toolbar-label">View</span>
@@ -44,8 +62,13 @@
     </div>
   </div>
   <div class="toolbar-divider" aria-hidden="true"></div>
-  <div class="toolbar-section toolbar-tags">
-    <span class="toolbar-label">Tags</span>
+  <form class="sort-control" method="get" action="{{ url_for('ui.project_board', project_id=project.id) }}">
+    <input type="hidden" name="search" value="{{ filters.search or '' }}">
+    <label>Sort <select name="sort" onchange="this.form.requestSubmit()"><option value="priority" {% if filters.sort == 'priority' %}selected{% endif %}>Priority</option><option value="created_at" {% if filters.sort == 'created_at' %}selected{% endif %}>Created</option><option value="updated_at" {% if filters.sort == 'updated_at' %}selected{% endif %}>Updated</option><option value="title" {% if filters.sort == 'title' %}selected{% endif %}>Title</option><option value="status" {% if filters.sort == 'status' %}selected{% endif %}>Status</option></select></label>
+    <label class="sr-only" for="sort-direction">Order</label><select id="sort-direction" name="direction" onchange="this.form.requestSubmit()"><option value="asc" {% if filters.direction == 'asc' %}selected{% endif %}>↑</option><option value="desc" {% if filters.direction == 'desc' %}selected{% endif %}>↓</option></select>
+  </form>
+  <details class="tag-filter-menu">
+    <summary>Tags <span class="tag-filter-count" hidden></span></summary>
     <div class="tag-filters" role="group" aria-label="Filter stories by tag">
       {% for tag in project_tags %}
       <button class="tag-filter" type="button" data-tag-filter="{{ tag.id }}" aria-pressed="false" style="--tag-color: {{ tag.color }}">
@@ -54,8 +77,8 @@
       {% endfor %}
       <button class="clear-tag-filters" type="button" hidden>Clear filters</button>
     </div>
-  </div>
-  <details class="board-customizer" {% if tag_error %}open{% endif %}>
+  </details>
+  <details class="board-customizer" {% if tag_error or project_error %}open{% endif %}>
     <summary>Customize</summary>
     <div class="customizer-panel">
       <section class="customizer-section">
@@ -72,7 +95,7 @@
         </div>
         <p class="view-announcement sr-only" aria-live="polite"></p>
       </section>
-      <form method="post" action="{{ url_for('ui.create_project_tag', project_id=project.id) }}" class="customizer-section tag-create-form">
+      {% if not project.archived_at %}<form method="post" action="{{ url_for('ui.create_project_tag', project_id=project.id) }}" class="customizer-section tag-create-form">
         <div>
           <p class="customizer-title">Create a project tag</p>
           <p class="customizer-note">Custom tags become available to every story in this project.</p>
@@ -84,8 +107,21 @@
           <button type="submit">Create tag</button>
         </div>
       </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('ui.update_project', project_id=project.id) }}" class="customizer-section project-edit-form">
+        <div><p class="customizer-title">Project details</p><p class="customizer-note">Keep the board name and mission current.</p></div>
+        {% if project_error %}<p class="form-error">{{ project_error }}</p>{% endif %}
+        <div class="tag-create-fields"><label>Name <input name="name" required maxlength="120" value="{{ project.name }}" {% if project.archived_at %}disabled{% endif %}></label><label>Description <input name="description" maxlength="4000" value="{{ project.description }}" {% if project.archived_at %}disabled{% endif %}></label>{% if not project.archived_at %}<button type="submit">Save project</button>{% endif %}</div>
+      </form>
+      {% if not project.archived_at %}<form method="post" action="{{ url_for('ui.archive_project', project_id=project.id) }}" class="customizer-section archive-project-form" onsubmit="return confirm('Archive {{ project.name }}? Its stories and history will be kept read-only until restored.')"><div><p class="customizer-title">Archive project</p><p class="customizer-note">Archive keeps all work and history, but prevents further changes.</p></div><button class="button-danger" type="submit">Archive project</button></form>{% endif %}
     </div>
   </details>
 </section>
 {% include "partials/board_columns.html" %}
+{% else %}
+<section class="activity-panel" aria-labelledby="activity-title">
+  <div class="section-header"><h2 id="activity-title">Activity history</h2><span>Latest {{ activity|length }}</span></div>
+  {% if activity %}<ol class="activity-list">{% for event in activity %}<li><div><strong>{{ event.event_type|replace('_', ' ')|replace('.', ' · ')|title }}</strong><p>{% if event.details.title %}{{ event.details.title }}{% elif event.details.name %}{{ event.details.name }}{% elif event.details.changes %}{{ event.details.changes|length }} field{{ '' if event.details.changes|length == 1 else 's' }} changed{% else %}Project activity recorded{% endif %}</p></div><time datetime="{{ event.created_at.isoformat() }}">{{ event.created_at.strftime('%b %-d, %Y %H:%M') }}</time></li>{% endfor %}</ol>{% else %}<p class="empty-state">No project activity yet.</p>{% endif %}
+</section>
+{% endif %}
 {% endblock %}

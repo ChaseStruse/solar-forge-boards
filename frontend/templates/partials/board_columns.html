@@ -9,22 +9,23 @@
       {% for item in grouped_items[status] %}
       <article
         class="work-card"
-        draggable="true"
+        draggable="{{ 'false' if project_archived else 'true' }}"
         data-current-status="{{ status.value }}"
         data-allowed-statuses="{% for target in allowed_transitions[status] %}{{ target.value }}{% if not loop.last %},{% endif %}{% endfor %}"
         data-tag-ids="{% for tag in item.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}"
       >
         <div class="card-accent" aria-hidden="true"></div>
-        <button class="card-open" type="button" onclick="document.getElementById('story-dialog-{{ item.id }}').showModal()">
+        <button class="card-open" type="button" {% if project_archived %}disabled aria-label="Archived story: {{ item.title }}"{% else %}onclick="document.getElementById('story-dialog-{{ item.id }}').showModal()"{% endif %}>
           <span>{{ item.title }}</span>
         </button>
+        {% if not project_archived %}<div class="priority-actions" aria-label="Change {{ item.title }} priority"><form hx-post="{{ url_for('ui.move_work_item_priority', work_item_id=item.id) }}" hx-target="#board" hx-swap="outerHTML"><button type="submit" name="direction" value="up" {% if loop.first %}disabled{% endif %} aria-label="Move {{ item.title }} up">↑</button></form><form hx-post="{{ url_for('ui.move_work_item_priority', work_item_id=item.id) }}" hx-target="#board" hx-swap="outerHTML"><button type="submit" name="direction" value="down" {% if loop.last %}disabled{% endif %} aria-label="Move {{ item.title }} down">↓</button></form></div>{% endif %}
         {% if item.tags %}
         <div class="card-tags" aria-label="Story tags">
           {% for tag in item.tags %}<span class="tag-pill" style="--tag-color: {{ tag.color }}">{{ tag.name }}</span>{% endfor %}
         </div>
         {% endif %}
         {% if item.description %}<p class="card-summary">{{ item.description }}</p>{% endif %}
-        {% if item.description or item.technical_description or item.repository_url %}
+        {% if item.description or item.technical_description or item.repository_url or item.acceptance_criteria %}
         <details class="card-details">
           <summary>Story details <span aria-hidden="true">⌄</span></summary>
           <div class="detail-content">
@@ -42,12 +43,13 @@
               <a class="repo-link" href="{{ item.repository_url }}" target="_blank" rel="noopener noreferrer">Open repository <span aria-hidden="true">↗</span></a>
             </section>
             {% endif %}
+            {% if item.acceptance_criteria %}<section class="story-detail"><h4>Acceptance criteria</h4><ul class="acceptance-criteria">{% for criterion in item.acceptance_criteria %}<li>{{ criterion }}</li>{% endfor %}</ul></section>{% endif %}
           </div>
         </details>
         {% endif %}
-        <form class="drag-transition-form" hx-post="{{ url_for('ui.transition_work_item', work_item_id=item.id) }}" hx-target="#board" hx-swap="outerHTML">
+        {% if not project_archived %}<form class="drag-transition-form" hx-post="{{ url_for('ui.transition_work_item', work_item_id=item.id) }}" hx-target="#board" hx-swap="outerHTML">
           <input type="hidden" name="status" value="">
-        </form>
+        </form>{% endif %}
         <dialog class="story-dialog" id="story-dialog-{{ item.id }}" onclick="if (event.target === this) this.close()">
           <div class="dialog-panel">
             <div class="dialog-header">
@@ -62,6 +64,7 @@
               <label>Title <input name="title" required maxlength="200" value="{{ item.title }}"></label>
               <label>Description <textarea name="description" maxlength="10000" rows="4">{{ item.description }}</textarea></label>
               <label>Technical description <textarea name="technical_description" maxlength="20000" rows="6">{{ item.technical_description }}</textarea></label>
+              <label>Acceptance criteria <textarea name="acceptance_criteria" rows="5" maxlength="50099" placeholder="One verifiable outcome per line">{{ item.acceptance_criteria|join('\n') }}</textarea><span class="field-note">One clear, verifiable outcome per line.</span></label>
               <label>Repository link <input name="repository_url" type="url" maxlength="2048" value="{{ item.repository_url }}" placeholder="https://github.com/organization/repository"></label>
               <fieldset class="tag-picker">
                 <legend>Tags</legend>
