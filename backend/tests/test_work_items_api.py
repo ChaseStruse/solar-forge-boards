@@ -17,6 +17,7 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
     assert created.status_code == 201
     item: dict[str, object] = created.get_json()["data"]
     assert item["title"] == "Ship slice"
+    assert isinstance(item["reference_number"], int)
     assert item["technical_description"] == "Expose a POST endpoint and persist the result."
     assert item["repository_url"] == "https://github.com/example/solar-forge"
     assert item["acceptance_criteria"] == []
@@ -27,6 +28,10 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
 
     fetched = client.get(f"/api/v1/work-items/{item['id']}")
     assert fetched.get_json()["data"] == item
+
+    by_reference = client.get(f"/api/v1/work-items/by-reference/{item['reference_number']}")
+    assert by_reference.status_code == 200
+    assert by_reference.get_json()["data"] == item
 
 
 def test_work_item_acceptance_criteria_search_and_sort(
@@ -149,6 +154,40 @@ def test_valid_status_transition_creates_activity(
         and event["details"] == {"from": "todo", "to": "in_progress"}
         for event in events
     )
+
+
+def test_priority_move_reorders_stories_within_their_lane(
+    client: FlaskClient, project_id: str, work_item_id: str
+) -> None:
+    """Priority commands swap adjacent stories without changing their workflow status."""
+    second = client.post(
+        f"/api/v1/projects/{project_id}/work-items", json={"title": "Second priority"}
+    ).get_json()["data"]
+    third = client.post(
+        f"/api/v1/projects/{project_id}/work-items", json={"title": "Third priority"}
+    ).get_json()["data"]
+
+    moved = client.post(f"/api/v1/work-items/{second['id']}/priority", json={"direction": "down"})
+    assert moved.status_code == 200
+    assert moved.get_json()["data"]["status"] == "todo"
+
+    ordered = client.get(f"/api/v1/projects/{project_id}/work-items?sort=priority")
+    assert [item["id"] for item in ordered.get_json()["data"]] == [
+        work_item_id,
+        third["id"],
+        second["id"],
+    ]
+    event_types = {
+        event["event_type"]
+        for event in client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
+    }
+    assert "work_item.priority_changed" in event_types
+
+    first_boundary = client.post(
+        f"/api/v1/work-items/{work_item_id}/priority", json={"direction": "up"}
+    )
+    assert first_boundary.status_code == 200
+    assert first_boundary.get_json()["data"]["priority"] == 1
 
 
 def test_invalid_status_transition_is_rejected(client: FlaskClient, work_item_id: str) -> None:

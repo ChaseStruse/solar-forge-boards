@@ -61,6 +61,25 @@ def get_work_item(connection: Connection, work_item_id: UUID) -> WorkItemRow | N
     return cast(WorkItemRow, dict(row)) if row is not None else None
 
 
+def get_work_item_by_reference_number(
+    connection: Connection, reference_number: int
+) -> WorkItemRow | None:
+    """Return a work item by its human-friendly global reference number."""
+    result: Result[Any] = connection.execute(
+        select(work_items).where(work_items.c.reference_number == reference_number)
+    )
+    row: Any = result.mappings().one_or_none()
+    return cast(WorkItemRow, dict(row)) if row is not None else None
+
+
+def next_reference_number(connection: Connection) -> int:
+    """Return the next global story reference number."""
+    result: Result[Any] = connection.execute(
+        select(func.coalesce(func.max(work_items.c.reference_number), 0) + 1)
+    )
+    return int(result.scalar_one())
+
+
 def list_work_items_by_status(
     connection: Connection, project_id: UUID, status: str
 ) -> list[WorkItemRow]:

@@ -16,3 +16,4 @@ htmlcov/
 *.db
 dist/
 build/
+*/migrations/*

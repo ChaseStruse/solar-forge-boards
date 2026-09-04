@@ -15,6 +15,7 @@
         data-tag-ids="{% for tag in item.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}"
       >
         <div class="card-accent" aria-hidden="true"></div>
+        <span class="story-reference">#{{ item.reference_number }}</span>
         <button class="card-open" type="button" {% if project_archived %}disabled aria-label="Archived story: {{ item.title }}"{% else %}onclick="document.getElementById('story-dialog-{{ item.id }}').showModal()"{% endif %}>
           <span>{{ item.title }}</span>
         </button>
@@ -55,6 +56,7 @@
             <div class="dialog-header">
               <div>
                 <p class="eyebrow">{{ status.value|replace('_', ' ') }}</p>
+                <p class="story-reference">Story #{{ item.reference_number }}</p>
                 <h2>Edit story</h2>
               </div>
               <button class="dialog-close" type="button" aria-label="Close story editor" onclick="this.closest('dialog').close()">×</button>

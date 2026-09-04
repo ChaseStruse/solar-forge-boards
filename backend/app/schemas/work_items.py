@@ -154,6 +154,7 @@ class WorkItemRead(ApiModel):
     """Public work-item representation."""
 
     id: UUID
+    reference_number: int
     project_id: UUID
     title: str
     description: str

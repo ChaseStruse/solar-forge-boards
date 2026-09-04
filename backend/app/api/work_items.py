@@ -18,6 +18,15 @@ from backend.app.services import work_items as work_item_service
 work_items_blueprint: Blueprint = Blueprint("api_work_items", __name__, url_prefix="/api/v1")
 
 
+@work_items_blueprint.get("/work-items/by-reference/<int:reference_number>")
+def get_work_item_by_reference_number(reference_number: int) -> tuple[Response, int]:
+    """Get a work item by its visible human-friendly reference number."""
+    item: WorkItemWithTagsRow = work_item_service.get_work_item_by_reference_number(
+        get_engine(), reference_number
+    )
+    return json_model(WorkItemRead.model_validate(item))
+
+
 @work_items_blueprint.get("/work-items/<uuid:work_item_id>")
 def get_work_item(work_item_id: UUID) -> tuple[Response, int]:
     """Get a work item."""

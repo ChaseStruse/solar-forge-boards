@@ -73,6 +73,10 @@ Work items begin in `todo`. Transitions are explicit commands rather than generi
 `PATCH /work-items/{id}` cannot alter status, so every lifecycle change passes through the
 transition policy and produces an event.
 
+Each workflow lane has a persisted story priority order. A priority command swaps a story with its
+adjacent lane peer in one transaction and records an activity event. Transitioning a story places it
+at the end of the destination lane, avoiding ambiguous cross-lane priority comparisons.
+
 Activity events are append-only application facts. A service records a meaningful write and its
 event in the same database transaction. Deleting a story preserves its earlier events and adds a
 deletion event containing the former ID, title, and status. Activity currently supports audit

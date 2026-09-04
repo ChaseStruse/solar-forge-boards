@@ -13,7 +13,12 @@ from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.repositories import tags as tag_repository
 from backend.app.repositories import work_items as work_item_repository
-from backend.app.schemas.work_items import PriorityMove, StatusTransition, WorkItemCreate, WorkItemUpdate
+from backend.app.schemas.work_items import (
+    PriorityMove,
+    StatusTransition,
+    WorkItemCreate,
+    WorkItemUpdate,
+)
 
 
 def create_work_item(
@@ -31,6 +36,7 @@ def create_work_item(
             connection,
             {
                 "id": work_item_id,
+                "reference_number": work_item_repository.next_reference_number(connection),
                 "project_id": project_id,
                 "title": command.title,
                 "description": command.description,
@@ -95,6 +101,17 @@ def get_work_item(engine: Engine, work_item_id: UUID) -> WorkItemWithTagsRow:
         item: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if item is None:
             raise not_found("Work item", str(work_item_id))
+        return enrich_work_items(connection, [item])[0]
+
+
+def get_work_item_by_reference_number(engine: Engine, reference_number: int) -> WorkItemWithTagsRow:
+    """Get a story by the number people can use in conversations and pull requests."""
+    with engine.connect() as connection:
+        item: WorkItemRow | None = work_item_repository.get_work_item_by_reference_number(
+            connection, reference_number
+        )
+        if item is None:
+            raise not_found("Work item", f"#{reference_number}")
         return enrich_work_items(connection, [item])[0]
 
 

@@ -69,6 +69,9 @@ def test_htmx_create_edit_and_transition_refresh_board(
     assert b'draggable="true"' in created.data
     assert b'data-allowed-statuses="' in created.data
     assert b'class="drag-transition-form"' in created.data
+    assert b"Move HTMX card up" in created.data
+    assert b"Move HTMX card down" in created.data
+    assert b"#1" in created.data
     assert b"Drag the card to another lane" in created.data
     assert b'<select name="status"' not in created.data
     assert b"Delete story" in created.data

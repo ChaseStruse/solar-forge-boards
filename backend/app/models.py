@@ -38,6 +38,7 @@ work_items: Table = Table(
     "work_items",
     metadata,
     Column("id", Uuid(as_uuid=True), primary_key=True),
+    Column("reference_number", Integer, nullable=False, unique=True),
     Column(
         "project_id",
         Uuid(as_uuid=True),
@@ -135,6 +136,7 @@ class WorkItemRow(TypedDict):
     """Typed work-item record returned by the repository."""
 
     id: UUID
+    reference_number: int
     project_id: UUID
     title: str
     description: str

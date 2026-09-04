@@ -31,6 +31,9 @@ fields, move the story to any currently valid destination, or permanently delete
 for confirmation, removes the card, and retains historical activity with the deleted story reference
 cleared.
 
+Every story displays a global reference number such as **#42**. Include that number in agent chats,
+pull requests, and handoffs to identify a story without copying its UUID.
+
 ## Moving stories
 
 Drag a card onto a highlighted valid lane. Invalid destinations do not accept the drop. The story
@@ -48,6 +51,12 @@ Allowed destinations are:
 
 Moving a story to its current lane makes no change. Every successful state change is recorded in
 project activity.
+
+## Story priority
+
+Within each lane, stories are ordered by priority. Use the **up** and **down** arrow buttons on a
+card to swap it with the adjacent story. The first and last cards cannot move farther in their lane.
+Moving a story to another workflow lane places it at the end of that lane.
 
 ## Tags and filtering
 

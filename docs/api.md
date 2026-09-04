@@ -30,9 +30,11 @@ pagination, or rate limiting and must not be exposed to untrusted networks.
 | `POST` | `/api/v1/projects/{project_id}/work-items` | Create a story in Todo |
 | `GET` | `/api/v1/projects/{project_id}/work-items` | List project stories in creation order |
 | `GET` | `/api/v1/work-items/{work_item_id}` | Get one story |
+| `GET` | `/api/v1/work-items/by-reference/{reference_number}` | Get a story by visible reference number |
 | `PATCH` | `/api/v1/work-items/{work_item_id}` | Edit story content or replace tags |
 | `DELETE` | `/api/v1/work-items/{work_item_id}` | Permanently delete a story |
 | `POST` | `/api/v1/work-items/{work_item_id}/transitions` | Request a lifecycle transition |
+| `POST` | `/api/v1/work-items/{work_item_id}/priority` | Move a story up or down in its current lane |
 | `GET` | `/api/v1/projects/{project_id}/activity` | Get the 50 newest activity events |
 
 ## Projects
@@ -114,8 +116,11 @@ Returns `201`. New work items begin in `todo`. Field limits are:
 | `acceptance_criteria` | Optional ordered list of up to 100 nonblank items, each up to 500 characters |
 | `tag_ids` | Optional, at most 20 unique UUIDs belonging to this project |
 
-All work-item responses embed complete tag objects in `tags`, allowing a client to classify a story
-without another request.
+All work-item responses include a globally unique integer `reference_number` for human and agent
+reference, alongside their internal UUID. They embed complete tag objects in `tags`, allowing a
+client to classify a story without another request. Use
+`GET /api/v1/work-items/by-reference/{reference_number}` when a conversation or pull request only
+has the visible number.
 
 ### List stories
 
@@ -130,8 +135,8 @@ Add repeated `tag_id` query parameters to filter the collection:
 Multiple tag IDs use OR matching: a story is returned when it has any selected tag. Every filter tag
 must belong to the project; otherwise the API returns `422 invalid_story_tags`. `search` matches a
 story's title, description, or technical description case-insensitively. `sort` accepts
-`created_at`, `updated_at`, `title`, or `status`, and `direction` accepts `asc` or `desc`.
-Without controls, stories remain in creation order.
+`priority`, `created_at`, `updated_at`, `title`, or `status`, and `direction` accepts `asc` or
+`desc`. Without controls, stories are ordered by their persisted priority within each workflow lane.
 
 ### Get, edit, or delete a story
 
@@ -172,6 +177,19 @@ Requesting the current status is an idempotent no-op. An invalid change returns
 `409 invalid_status_transition` with `current` and `target` details. A successful change emits
 `work_item.status_changed`.
 
+### Move priority
+
+`POST /api/v1/work-items/{work_item_id}/priority` moves a story one position within its current
+workflow lane:
+
+```json
+{"direction": "up"}
+```
+
+`direction` is `up` or `down`. Moving beyond the first or last story is an idempotent no-op. A
+successful swap emits `work_item.priority_changed`. Moving a story to another status places it at
+the end of the destination lane's priority order.
+
 ## Activity
 
 `GET /api/v1/projects/{project_id}/activity`
@@ -186,6 +204,7 @@ Returns at most 50 events, newest first. Each event contains `id`, `project_id`,
 - `work_item.created`
 - `work_item.updated`
 - `work_item.status_changed`
+- `work_item.priority_changed`
 - `work_item.deleted`
 - `tag.created`
 
