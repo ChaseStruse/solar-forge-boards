@@ -12,6 +12,8 @@ transitions, project-scoped tags, and an immutable activity trail.
 - Delete stories with confirmation while retaining their project activity history.
 - Start every project with Business, Coding, Configuration, and Spike tags, then add custom tags.
 - Filter cards by one or more tags; multiple selected tags use OR matching.
+- Search and sort stories, review project activity, and capture acceptance criteria.
+- Edit project details or archive a project into reversible, read-only history.
 - Switch between board presets or show and hide individual lanes. Saved lane visibility is local to
   the browser and project.
 - Use the same backend rules through the human-facing UI or the `/api/v1` JSON API.
@@ -92,6 +94,6 @@ docs/                        User, API, architecture, development, and agent-int
 ## Current boundaries
 
 Authentication, authorization, multi-tenancy, pagination, assignments, comments, tag editing or
-deletion, project deletion, and webhooks are not implemented. Do not expose the current application
+deletion, permanent project deletion, and webhooks are not implemented. Do not expose the current application
 to untrusted networks. The service and repository boundaries are designed so these capabilities can
 be added without coupling API clients to the HTML interface.

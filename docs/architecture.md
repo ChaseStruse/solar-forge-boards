@@ -78,6 +78,11 @@ event in the same database transaction. Deleting a story preserves its earlier e
 deletion event containing the former ID, title, and status. Activity currently supports audit
 history and provides the seam for later notifications, webhooks, analytics, and agent context.
 
+Projects can be archived without deleting their stories, tags, or activity. Archived projects are
+readable history, while service-layer checks reject writes consistently for API and HTMX clients.
+Acceptance criteria are an ordered JSON collection on a work item so their edits remain part of the
+same transactional story update and activity event.
+
 New projects receive their four default tags in the same transaction as project creation. Work-item
 responses embed their ordered tag objects so agent and UI clients do not need an N+1 lookup pattern.
 

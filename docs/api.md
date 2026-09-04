@@ -22,6 +22,9 @@ pagination, or rate limiting and must not be exposed to untrusted networks.
 | `POST` | `/api/v1/projects` | Create a project and its four default tags |
 | `GET` | `/api/v1/projects` | List projects in creation order |
 | `GET` | `/api/v1/projects/{project_id}` | Get one project |
+| `PATCH` | `/api/v1/projects/{project_id}` | Edit an active project's name or description |
+| `POST` | `/api/v1/projects/{project_id}/archive` | Archive a project into read-only history |
+| `POST` | `/api/v1/projects/{project_id}/restore` | Restore an archived project |
 | `GET` | `/api/v1/projects/{project_id}/tags` | List project tags by name |
 | `POST` | `/api/v1/projects/{project_id}/tags` | Create a custom tag |
 | `POST` | `/api/v1/projects/{project_id}/work-items` | Create a story in Todo |
@@ -54,7 +57,10 @@ a `project.created` activity event.
 - `GET /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
 
-Project responses contain `id`, `name`, `description`, `created_at`, and `updated_at`.
+Project responses contain `id`, `name`, `description`, nullable `archived_at`, `created_at`, and
+`updated_at`. `PATCH` accepts one or both of `name` and `description`. Archived projects remain
+readable but reject project, tag, and story writes with `409 project_archived`; restore them with
+the restore endpoint. Archiving and restoring are idempotent and create activity events.
 
 ## Tags
 
@@ -105,6 +111,7 @@ Returns `201`. New work items begin in `todo`. Field limits are:
 | `description` | Optional, up to 10,000 characters |
 | `technical_description` | Optional, up to 20,000 characters |
 | `repository_url` | Optional, up to 2,048 characters, complete HTTP(S) URL |
+| `acceptance_criteria` | Optional ordered list of up to 100 nonblank items, each up to 500 characters |
 | `tag_ids` | Optional, at most 20 unique UUIDs belonging to this project |
 
 All work-item responses embed complete tag objects in `tags`, allowing a client to classify a story
@@ -121,8 +128,10 @@ Add repeated `tag_id` query parameters to filter the collection:
 ```
 
 Multiple tag IDs use OR matching: a story is returned when it has any selected tag. Every filter tag
-must belong to the project; otherwise the API returns `422 invalid_story_tags`. Without filters, all
-project stories are returned in creation order.
+must belong to the project; otherwise the API returns `422 invalid_story_tags`. `search` matches a
+story's title, description, or technical description case-insensitively. `sort` accepts
+`created_at`, `updated_at`, `title`, or `status`, and `direction` accepts `asc` or `desc`.
+Without controls, stories remain in creation order.
 
 ### Get, edit, or delete a story
 
@@ -131,9 +140,9 @@ project stories are returned in creation order.
 - `DELETE /api/v1/work-items/{work_item_id}`
 
 `PATCH` requires at least one of `title`, `description`, `technical_description`, `repository_url`,
-or `tag_ids`. Only supplied properties are changed. Supplying an empty `tag_ids` array clears all
-tags; omitting `tag_ids` preserves them. `status` is intentionally rejected so lifecycle rules
-cannot be bypassed.
+`acceptance_criteria`, or `tag_ids`. Only supplied properties are changed. Supplying an empty
+`acceptance_criteria` or `tag_ids` array clears that collection; omitting it preserves the value.
+`status` is intentionally rejected so lifecycle rules cannot be bypassed.
 
 Delete returns `204` with an empty body. It permanently removes the story. Existing activity events
 remain attached to the project with a null `work_item_id`, and a final `work_item.deleted` event
@@ -171,6 +180,9 @@ Returns at most 50 events, newest first. Each event contains `id`, `project_id`,
 `work_item_id`, `event_type`, `details`, and `created_at`. Current event types are:
 
 - `project.created`
+- `project.updated`
+- `project.archived`
+- `project.restored`
 - `work_item.created`
 - `work_item.updated`
 - `work_item.status_changed`

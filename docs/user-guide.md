@@ -9,7 +9,10 @@ Create a project from the Projects page with a unique name and an optional descr
 project shows its five workflow lanes and creates no stories automatically. New projects receive the
 four default tags: Business, Coding, Configuration, and Spike.
 
-Projects cannot currently be renamed or deleted through the UI or API.
+Open **Customize** on a board to edit its name and description. You can also archive a project
+after confirming the action. Archiving preserves every story and activity event but makes the
+project read-only; use **Restore project** from the archived board to resume planning. Permanent
+project deletion is not available.
 
 ## Stories
 
@@ -21,6 +24,7 @@ Select **Forge a story** on a project board. A story supports:
   characters.
 - **Repository link**: optional complete `http://` or `https://` URL.
 - **Tags**: zero or more tags from the current project, up to 20 through the API.
+- **Acceptance criteria**: optional ordered, verifiable outcomes, one per line.
 
 New stories begin in Todo. Select a card's title to open its editor. The editor can change all five
 fields, move the story to any currently valid destination, or permanently delete it. Deletion asks
@@ -56,6 +60,12 @@ Open **Customize** to create a project tag with a name and color. Tag names are 
 project without regard to capitalization. Custom tags are available to every story in that project.
 Tags cannot currently be renamed or deleted.
 
+## Search, sorting, and history
+
+Use the search field at the top of the board to find stories by title, description, or technical
+notes. The sort controls apply on the server, so they work consistently with the JSON API. Open the
+**Activity** tab to review the latest 50 project events, including project edits and archive changes.
+
 ## Board views
 
 The toolbar contains four visibility presets:
@@ -74,7 +84,7 @@ follow a user to another browser or device. Hiding a lane does not change or del
 
 ## Current limitations
 
-There are no user accounts or access controls. Assignments, comments, search, pagination, project
-editing, project deletion, tag editing, and tag deletion are not yet available. The board should be
+There are no user accounts or access controls. Assignments, comments, pagination, permanent project
+deletion, tag editing, and tag deletion are not yet available. The board should be
 treated as a trusted local or development application until authentication and authorization are
 implemented.
