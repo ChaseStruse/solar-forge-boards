@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · Solar Forge Boards{% endblock %}
+{% block content %}
+<nav class="breadcrumbs"><a href="{{ url_for('ui.projects_page') }}">Projects</a><span>/</span><span>{{ project.name }}</span></nav>
+<section class="page-heading board-heading">
+  <div><p class="eyebrow">Project board</p><h1>{{ project.name }}</h1><p class="lede">{{ project.description }}</p></div>
+  <details class="story-composer">
+    <summary><span aria-hidden="true">＋</span> Forge a story</summary>
+    <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) { this.reset(); this.closest('details').removeAttribute('open'); }">
+      <div class="form-intro">
+        <p class="eyebrow">New story</p>
+        <h2>Shape the next piece of work</h2>
+      </div>
+      <label>Title <input name="title" required maxlength="200" placeholder="What needs to happen?"></label>
+      <label>Description <textarea name="description" maxlength="10000" rows="3" placeholder="The user need, context, and intended outcome…"></textarea></label>
+      <label>Technical description <textarea name="technical_description" maxlength="20000" rows="4" placeholder="Implementation notes, constraints, APIs, or acceptance details…"></textarea></label>
+      <label>Repository link <input name="repository_url" type="url" maxlength="2048" placeholder="https://github.com/organization/repository"></label>
+      <fieldset class="tag-picker">
+        <legend>Tags</legend>
+        <div class="tag-options">
+          {% for tag in project_tags %}
+          <label class="tag-option" style="--tag-color: {{ tag.color }}">
+            <input type="checkbox" name="tag_ids" value="{{ tag.id }}">
+            <span>{{ tag.name }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="form-actions">
+        <button type="button" class="button-secondary" onclick="this.closest('details').removeAttribute('open')">Cancel</button>
+        <button type="submit">Add to forge</button>
+      </div>
+    </form>
+  </details>
+</section>
+<section class="board-toolbar view-system" data-project-id="{{ project.id }}" aria-label="Board view and filter controls">
+  <div class="toolbar-section toolbar-views">
+    <span class="toolbar-label">View</span>
+    <div class="view-presets" role="group" aria-label="Board view presets">
+      <button class="view-preset" type="button" data-view-preset="all" data-view-statuses="todo,in_progress,blocked,done,cancelled" aria-pressed="true">All lanes</button>
+      <button class="view-preset" type="button" data-view-preset="work" data-view-statuses="todo,in_progress,blocked" aria-pressed="false">Work queue</button>
+      <button class="view-preset" type="button" data-view-preset="focus" data-view-statuses="in_progress,blocked" aria-pressed="false">Focus</button>
+      <button class="view-preset" type="button" data-view-preset="delivery" data-view-statuses="in_progress,done" aria-pressed="false">Delivery</button>
+    </div>
+  </div>
+  <div class="toolbar-divider" aria-hidden="true"></div>
+  <div class="toolbar-section toolbar-tags">
+    <span class="toolbar-label">Tags</span>
+    <div class="tag-filters" role="group" aria-label="Filter stories by tag">
+      {% for tag in project_tags %}
+      <button class="tag-filter" type="button" data-tag-filter="{{ tag.id }}" aria-pressed="false" style="--tag-color: {{ tag.color }}">
+        <span class="tag-dot" aria-hidden="true"></span>{{ tag.name }}
+      </button>
+      {% endfor %}
+      <button class="clear-tag-filters" type="button" hidden>Clear filters</button>
+    </div>
+  </div>
+  <details class="board-customizer" {% if tag_error %}open{% endif %}>
+    <summary>Customize</summary>
+    <div class="customizer-panel">
+      <section class="customizer-section">
+        <div>
+          <p class="customizer-title">Visible lanes</p>
+          <p class="customizer-note">Toggle individual workflow columns.</p>
+        </div>
+        <div class="lane-toggles" role="group" aria-label="Show or hide board lanes">
+          {% for status in statuses %}
+          <button class="lane-toggle lane-toggle-{{ status.value }}" type="button" data-lane-toggle="{{ status.value }}" aria-pressed="true">
+            <span aria-hidden="true"></span>{{ status.value|replace('_', ' ')|title }}
+          </button>
+          {% endfor %}
+        </div>
+        <p class="view-announcement sr-only" aria-live="polite"></p>
+      </section>
+      <form method="post" action="{{ url_for('ui.create_project_tag', project_id=project.id) }}" class="customizer-section tag-create-form">
+        <div>
+          <p class="customizer-title">Create a project tag</p>
+          <p class="customizer-note">Custom tags become available to every story in this project.</p>
+        </div>
+        {% if tag_error %}<p class="form-error">{{ tag_error }}</p>{% endif %}
+        <div class="tag-create-fields">
+          <label>Name <input name="name" required maxlength="60" placeholder="Security"></label>
+          <label>Color <input class="tag-color-input" name="color" type="color" value="#63f5c4"></label>
+          <button type="submit">Create tag</button>
+        </div>
+      </form>
+    </div>
+  </details>
+</section>
+{% include "partials/board_columns.html" %}
+{% endblock %}
