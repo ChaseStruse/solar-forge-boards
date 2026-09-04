@@ -15,6 +15,11 @@ def test_projects_page_and_board_render(client: FlaskClient, project_id: str) ->
     assert b"In Progress" in board.data
     assert b"Forge a story" in board.data
     assert b"Technical description" in board.data
+    assert b"Acceptance criteria" in board.data
+    assert b"Search stories" in board.data
+    assert b">Activity<" in board.data
+    assert b"Activity history" not in board.data
+    assert b'class="tag-filter-menu"' in board.data
     assert b'aria-label="Filter stories by tag"' in board.data
     assert b"Tags" in board.data
     assert b"Coding" in board.data
@@ -29,6 +34,11 @@ def test_projects_page_and_board_render(client: FlaskClient, project_id: str) ->
     assert b"Visible lanes" in board.data
     assert f'data-project-id="{project_id}"'.encode() in board.data
 
+    activity = client.get(f"/ui/projects/{project_id}?tab=activity")
+    assert activity.status_code == 200
+    assert b"Activity history" in activity.data
+    assert b'id="board"' not in activity.data
+
 
 def test_htmx_create_edit_and_transition_refresh_board(
     client: FlaskClient, project_id: str
@@ -42,6 +52,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
             "title": "HTMX card",
             "description": "A human-friendly explanation.",
             "technical_description": "A typed service boundary.",
+            "acceptance_criteria": "The card is visible.\nThe workflow is available.",
             "repository_url": "https://github.com/example/solar-forge",
             "tag_ids": coding_tag["id"],
         },
@@ -143,3 +154,12 @@ def test_custom_tag_can_be_created_from_board(client: FlaskClient, project_id: s
     )
     assert duplicate.status_code == 422
     assert b"already exists" in duplicate.data
+
+
+def test_archived_project_board_is_read_only(client: FlaskClient, project_id: str) -> None:
+    """An archived board visibly preserves history without inviting writes."""
+    assert client.post(f"/ui/projects/{project_id}/archive").status_code == 302
+    board = client.get(f"/ui/projects/{project_id}")
+    assert b"This project is read-only." in board.data
+    assert b"Restore project" in board.data
+    assert b"Forge a story" not in board.data

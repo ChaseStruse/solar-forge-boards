@@ -1,6 +1,7 @@
 """Work-item request and response schemas."""
 
 from datetime import datetime
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -18,6 +19,7 @@ class WorkItemCreate(ApiModel):
     description: str = Field(default="", max_length=10000)
     technical_description: str = Field(default="", max_length=20000)
     repository_url: str = Field(default="", max_length=2048)
+    acceptance_criteria: list[str] = Field(default_factory=list, max_length=100)
     tag_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
     @field_validator("title")
@@ -47,6 +49,17 @@ class WorkItemCreate(ApiModel):
         """Deduplicate tag assignments while preserving request order."""
         return list(dict.fromkeys(value))
 
+    @field_validator("acceptance_criteria")
+    @classmethod
+    def normalize_acceptance_criteria(cls, value: list[str]) -> list[str]:
+        """Normalize checklist items and reject blank or oversized entries."""
+        normalized: list[str] = [criterion.strip() for criterion in value]
+        if any(not criterion for criterion in normalized):
+            raise ValueError("Acceptance criteria cannot contain blank items.")
+        if any(len(criterion) > 500 for criterion in normalized):
+            raise ValueError("Each acceptance criterion must be at most 500 characters.")
+        return normalized
+
 
 class WorkItemUpdate(ApiModel):
     """Partial input for editing work-item content."""
@@ -55,6 +68,7 @@ class WorkItemUpdate(ApiModel):
     description: str | None = Field(default=None, max_length=10000)
     technical_description: str | None = Field(default=None, max_length=20000)
     repository_url: str | None = Field(default=None, max_length=2048)
+    acceptance_criteria: list[str] | None = Field(default=None, max_length=100)
     tag_ids: list[UUID] | None = Field(default=None, max_length=20)
 
     @field_validator("title")
@@ -82,6 +96,12 @@ class WorkItemUpdate(ApiModel):
         """Deduplicate optional tag assignments."""
         return None if value is None else list(dict.fromkeys(value))
 
+    @field_validator("acceptance_criteria")
+    @classmethod
+    def normalize_optional_acceptance_criteria(cls, value: list[str] | None) -> list[str] | None:
+        """Apply the creation checklist rules to an optional replacement list."""
+        return None if value is None else WorkItemCreate.normalize_acceptance_criteria(value)
+
     @model_validator(mode="after")
     def ensure_update_present(self) -> WorkItemUpdate:
         """Require at least one editable field."""
@@ -92,6 +112,7 @@ class WorkItemUpdate(ApiModel):
                 self.description,
                 self.technical_description,
                 self.repository_url,
+                self.acceptance_criteria,
                 self.tag_ids,
             )
         ):
@@ -105,6 +126,30 @@ class StatusTransition(ApiModel):
     status: WorkItemStatus
 
 
+class PriorityMove(ApiModel):
+    """Input for moving a story within its current workflow lane."""
+
+    direction: Literal["up", "down"]
+
+
+class WorkItemListFilter(ApiModel):
+    """Optional collection search and ordering controls."""
+
+    search: str | None = Field(default=None, max_length=200)
+    sort: Literal["priority", "created_at", "updated_at", "title", "status"] = "priority"
+    direction: Literal["asc", "desc"] = "asc"
+    tag_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+    @field_validator("search")
+    @classmethod
+    def strip_optional_search(cls, value: str | None) -> str | None:
+        """Normalize a blank search to no filter."""
+        if value is None:
+            return None
+        stripped: str = value.strip()
+        return stripped or None
+
+
 class WorkItemRead(ApiModel):
     """Public work-item representation."""
 
@@ -114,7 +159,9 @@ class WorkItemRead(ApiModel):
     description: str
     technical_description: str
     repository_url: str
+    acceptance_criteria: list[str]
     tags: list[TagRead]
     status: WorkItemStatus
+    priority: int
     created_at: datetime
     updated_at: datetime

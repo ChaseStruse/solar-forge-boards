@@ -36,6 +36,8 @@ def create_tag(engine: Engine, project_id: UUID, command: TagCreate) -> TagRow:
         project: ProjectRow | None = project_repository.get_project(connection, project_id)
         if project is None:
             raise not_found("Project", str(project_id))
+        if project["archived_at"] is not None:
+            raise AppError("project_archived", "Archived projects are read-only.", 409)
         existing: list[TagRow] = tag_repository.list_project_tags(connection, project_id)
         if any(tag["name"].casefold() == command.name.casefold() for tag in existing):
             raise AppError(

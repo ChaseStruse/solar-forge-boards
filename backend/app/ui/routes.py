@@ -10,10 +10,16 @@ from werkzeug.wrappers import Response
 from backend.app.database import get_engine
 from backend.app.domain import ALLOWED_TRANSITIONS, WorkItemStatus
 from backend.app.errors import AppError
-from backend.app.models import ProjectRow, TagRow, WorkItemWithTagsRow
-from backend.app.schemas.projects import ProjectCreate
+from backend.app.models import ActivityRow, ProjectRow, TagRow, WorkItemWithTagsRow
+from backend.app.schemas.projects import ProjectCreate, ProjectUpdate
 from backend.app.schemas.tags import TagCreate
-from backend.app.schemas.work_items import StatusTransition, WorkItemCreate, WorkItemUpdate
+from backend.app.schemas.work_items import (
+    PriorityMove,
+    StatusTransition,
+    WorkItemCreate,
+    WorkItemListFilter,
+    WorkItemUpdate,
+)
 from backend.app.services import projects as project_service
 from backend.app.services import tags as tag_service
 from backend.app.services import work_items as work_item_service
@@ -52,6 +58,31 @@ def project_board(project_id: UUID) -> str:
     return render_project_board(project_id)
 
 
+@ui_blueprint.post("/ui/projects/<uuid:project_id>")
+def update_project(project_id: UUID) -> tuple[str, int] | Response:
+    """Update project details from the board settings form."""
+    try:
+        command: ProjectUpdate = ProjectUpdate.model_validate(request.form.to_dict())
+        project_service.update_project(get_engine(), project_id, command)
+    except (ValidationError, AppError) as error:
+        return render_project_board(project_id, project_error=str(error)), 422
+    return redirect(url_for("ui.project_board", project_id=project_id))
+
+
+@ui_blueprint.post("/ui/projects/<uuid:project_id>/archive")
+def archive_project(project_id: UUID) -> Response:
+    """Archive a project after the browser confirmation."""
+    project_service.archive_project(get_engine(), project_id)
+    return redirect(url_for("ui.project_board", project_id=project_id))
+
+
+@ui_blueprint.post("/ui/projects/<uuid:project_id>/restore")
+def restore_project(project_id: UUID) -> Response:
+    """Restore a project from its read-only archive."""
+    project_service.restore_project(get_engine(), project_id)
+    return redirect(url_for("ui.project_board", project_id=project_id))
+
+
 @ui_blueprint.post("/ui/projects/<uuid:project_id>/tags")
 def create_project_tag(project_id: UUID) -> tuple[str, int] | Response:
     """Create a custom project tag and return to the board."""
@@ -63,18 +94,49 @@ def create_project_tag(project_id: UUID) -> tuple[str, int] | Response:
     return redirect(url_for("ui.project_board", project_id=project_id))
 
 
-def render_project_board(project_id: UUID, *, tag_error: str | None = None) -> str:
+def render_project_board(
+    project_id: UUID,
+    *,
+    tag_error: str | None = None,
+    project_error: str | None = None,
+) -> str:
     """Render a board with its complete project tag vocabulary."""
     project: ProjectRow = project_service.get_project(get_engine(), project_id, html=True)
-    items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(get_engine(), project_id)
+    filters: WorkItemListFilter = WorkItemListFilter.model_validate(
+        {
+            "search": request.args.get("search"),
+            "sort": request.args.get("sort", "priority"),
+            "direction": request.args.get("direction", "asc"),
+        }
+    )
+    items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(
+        get_engine(),
+        project_id,
+        search=filters.search,
+        sort=filters.sort,
+        direction=filters.direction,
+    )
     project_tags: list[TagRow] = tag_service.list_project_tags(get_engine(), project_id)
+    active_tab: str = request.args.get("tab", "board")
+    if active_tab not in {"board", "activity"}:
+        active_tab = "board"
+    activity: list[ActivityRow] = (
+        project_service.list_project_activity(get_engine(), project_id)
+        if active_tab == "activity"
+        else []
+    )
     return render_template(
         "board.html",
         project=project,
         project_id=project_id,
+        project_archived=project["archived_at"] is not None,
+        active_tab=active_tab,
         grouped_items=group_work_items(items),
         project_tags=project_tags,
         tag_error=tag_error,
+        project_error=project_error,
+        activity=activity,
+        filters=filters,
         statuses=list(WorkItemStatus),
         allowed_transitions=ALLOWED_TRANSITIONS,
     )
@@ -96,6 +158,16 @@ def transition_work_item(work_item_id: UUID) -> tuple[str, int]:
     """Transition a card and return a refreshed board fragment."""
     command: StatusTransition = StatusTransition.model_validate(request.form.to_dict())
     item: WorkItemWithTagsRow = work_item_service.transition_work_item(
+        get_engine(), work_item_id, command
+    )
+    return render_board_fragment(UUID(str(item["project_id"]))), 200
+
+
+@ui_blueprint.post("/ui/work-items/<uuid:work_item_id>/priority")
+def move_work_item_priority(work_item_id: UUID) -> tuple[str, int]:
+    """Move a card within the current workflow lane and refresh the board."""
+    command: PriorityMove = PriorityMove.model_validate(request.form.to_dict())
+    item: WorkItemWithTagsRow = work_item_service.move_work_item_priority(
         get_engine(), work_item_id, command
     )
     return render_board_fragment(UUID(str(item["project_id"]))), 200
@@ -128,11 +200,13 @@ def delete_work_item(work_item_id: UUID) -> tuple[str, int]:
 
 def render_board_fragment(project_id: UUID) -> str:
     """Render the board columns for HTMX swaps."""
+    project: ProjectRow = project_service.get_project(get_engine(), project_id, html=True)
     items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(get_engine(), project_id)
     project_tags: list[TagRow] = tag_service.list_project_tags(get_engine(), project_id)
     return render_template(
         "partials/board_columns.html",
         project_id=project_id,
+        project_archived=project["archived_at"] is not None,
         grouped_items=group_work_items(items),
         project_tags=project_tags,
         statuses=list(WorkItemStatus),
@@ -156,4 +230,10 @@ def form_with_tag_ids() -> dict[str, Any]:
     """Preserve repeated tag checkbox values from an HTML form."""
     payload: dict[str, Any] = request.form.to_dict()
     payload["tag_ids"] = request.form.getlist("tag_ids")
+    if "acceptance_criteria" in payload:
+        payload["acceptance_criteria"] = [
+            criterion.strip()
+            for criterion in str(payload["acceptance_criteria"]).splitlines()
+            if criterion.strip()
+        ]
     return payload

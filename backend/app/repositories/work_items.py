@@ -3,7 +3,7 @@
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Connection, Result, delete, insert, select, update
+from sqlalchemy import Connection, Result, asc, delete, desc, func, insert, or_, select, update
 
 from backend.app.models import WorkItemRow, work_items
 
@@ -16,13 +16,38 @@ def create_work_item(connection: Connection, values: dict[str, Any]) -> WorkItem
     return cast(WorkItemRow, dict(result.mappings().one()))
 
 
-def list_work_items(connection: Connection, project_id: UUID) -> list[WorkItemRow]:
-    """Return work items for one project in creation order."""
+def list_work_items(
+    connection: Connection,
+    project_id: UUID,
+    *,
+    search: str | None = None,
+    sort: str = "created_at",
+    direction: str = "asc",
+) -> list[WorkItemRow]:
+    """Return filtered, ordered work items for one project."""
+    sort_columns: dict[str, Any] = {
+        "created_at": work_items.c.created_at,
+        "updated_at": work_items.c.updated_at,
+        "title": work_items.c.title,
+        "status": work_items.c.status,
+        "priority": work_items.c.priority,
+    }
+    sort_column: Any = sort_columns[sort]
+    order: Any = desc(sort_column) if direction == "desc" else asc(sort_column)
     query: Any = (
         select(work_items)
         .where(work_items.c.project_id == project_id)
-        .order_by(work_items.c.created_at)
+        .order_by(order, work_items.c.id)
     )
+    if search:
+        pattern: str = f"%{search.casefold()}%"
+        query = query.where(
+            or_(
+                work_items.c.title.ilike(pattern),
+                work_items.c.description.ilike(pattern),
+                work_items.c.technical_description.ilike(pattern),
+            )
+        )
     result: Result[Any] = connection.execute(query)
     return [cast(WorkItemRow, dict(row)) for row in result.mappings().all()]
 
@@ -34,6 +59,28 @@ def get_work_item(connection: Connection, work_item_id: UUID) -> WorkItemRow | N
     )
     row: Any = result.mappings().one_or_none()
     return cast(WorkItemRow, dict(row)) if row is not None else None
+
+
+def list_work_items_by_status(
+    connection: Connection, project_id: UUID, status: str
+) -> list[WorkItemRow]:
+    """Return one lane's stories in their persisted priority order."""
+    result: Result[Any] = connection.execute(
+        select(work_items)
+        .where(work_items.c.project_id == project_id, work_items.c.status == status)
+        .order_by(work_items.c.priority, work_items.c.id)
+    )
+    return [cast(WorkItemRow, dict(row)) for row in result.mappings().all()]
+
+
+def next_priority(connection: Connection, project_id: UUID, status: str) -> int:
+    """Return the next position at the end of a project's workflow lane."""
+    result: Result[Any] = connection.execute(
+        select(func.coalesce(func.max(work_items.c.priority), 0) + 1).where(
+            work_items.c.project_id == project_id, work_items.c.status == status
+        )
+    )
+    return int(result.scalar_one())
 
 
 def update_work_item(

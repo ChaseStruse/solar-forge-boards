@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     MetaData,
     String,
     Table,
@@ -28,6 +29,7 @@ projects: Table = Table(
     Column("id", Uuid(as_uuid=True), primary_key=True),
     Column("name", String(120), nullable=False, unique=True),
     Column("description", Text, nullable=False, server_default=""),
+    Column("archived_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
@@ -46,7 +48,9 @@ work_items: Table = Table(
     Column("description", Text, nullable=False, server_default=""),
     Column("technical_description", Text, nullable=False, server_default=""),
     Column("repository_url", String(2048), nullable=False, server_default=""),
+    Column("acceptance_criteria", JSON, nullable=False, server_default="[]"),
     Column("status", String(32), nullable=False, server_default="todo"),
+    Column("priority", Integer, nullable=False, server_default="1"),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     CheckConstraint(
@@ -122,6 +126,7 @@ class ProjectRow(TypedDict):
     id: UUID
     name: str
     description: str
+    archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -135,7 +140,9 @@ class WorkItemRow(TypedDict):
     description: str
     technical_description: str
     repository_url: str
+    acceptance_criteria: list[str]
     status: str
+    priority: int
     created_at: datetime
     updated_at: datetime
 

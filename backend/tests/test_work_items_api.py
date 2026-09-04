@@ -15,10 +15,11 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
         },
     )
     assert created.status_code == 201
-    item: dict[str, str] = created.get_json()["data"]
+    item: dict[str, object] = created.get_json()["data"]
     assert item["title"] == "Ship slice"
     assert item["technical_description"] == "Expose a POST endpoint and persist the result."
     assert item["repository_url"] == "https://github.com/example/solar-forge"
+    assert item["acceptance_criteria"] == []
     assert item["status"] == "todo"
 
     listed = client.get(f"/api/v1/projects/{project_id}/work-items")
@@ -26,6 +27,48 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
 
     fetched = client.get(f"/api/v1/work-items/{item['id']}")
     assert fetched.get_json()["data"] == item
+
+
+def test_work_item_acceptance_criteria_search_and_sort(
+    client: FlaskClient, project_id: str
+) -> None:
+    """The API provides validated criteria and server-side planning controls."""
+    first = client.post(
+        f"/api/v1/projects/{project_id}/work-items",
+        json={
+            "title": "Document the API",
+            "description": "Make the contract clear.",
+            "acceptance_criteria": [
+                "The reference covers every endpoint.",
+                "Examples are valid JSON.",
+            ],
+        },
+    )
+    assert first.status_code == 201
+    first_item = first.get_json()["data"]
+    assert first_item["acceptance_criteria"] == [
+        "The reference covers every endpoint.",
+        "Examples are valid JSON.",
+    ]
+    client.post(f"/api/v1/projects/{project_id}/work-items", json={"title": "Build the board"})
+
+    searched = client.get(
+        f"/api/v1/projects/{project_id}/work-items?search=contract&sort=title&direction=desc"
+    )
+    assert searched.status_code == 200
+    assert [item["id"] for item in searched.get_json()["data"]] == [first_item["id"]]
+
+    updated = client.patch(
+        f"/api/v1/work-items/{first_item['id']}", json={"acceptance_criteria": []}
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["data"]["acceptance_criteria"] == []
+
+    invalid = client.post(
+        f"/api/v1/projects/{project_id}/work-items",
+        json={"title": "Bad criteria", "acceptance_criteria": [" "]},
+    )
+    assert invalid.status_code == 422
 
 
 def test_repository_link_must_be_http_or_https(client: FlaskClient, project_id: str) -> None:

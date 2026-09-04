@@ -3,7 +3,7 @@
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Connection, Result, delete, insert, select
+from sqlalchemy import Connection, Result, delete, insert, select, update
 
 from backend.app.models import ProjectRow, projects
 
@@ -23,6 +23,17 @@ def list_projects(connection: Connection) -> list[ProjectRow]:
 def get_project(connection: Connection, project_id: UUID) -> ProjectRow | None:
     """Return a project by identifier."""
     result: Result[Any] = connection.execute(select(projects).where(projects.c.id == project_id))
+    row: Any = result.mappings().one_or_none()
+    return cast(ProjectRow, dict(row)) if row is not None else None
+
+
+def update_project(
+    connection: Connection, project_id: UUID, values: dict[str, Any]
+) -> ProjectRow | None:
+    """Update and return a project."""
+    result: Result[Any] = connection.execute(
+        update(projects).where(projects.c.id == project_id).values(**values).returning(projects)
+    )
     row: Any = result.mappings().one_or_none()
     return cast(ProjectRow, dict(row)) if row is not None else None
 

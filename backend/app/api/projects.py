@@ -8,9 +8,9 @@ from backend.app.api.utils import json_model, json_models, parse_json
 from backend.app.database import get_engine
 from backend.app.models import ActivityRow, ProjectRow, TagRow, WorkItemWithTagsRow
 from backend.app.schemas.common import ActivityEventRead
-from backend.app.schemas.projects import ProjectCreate, ProjectRead
-from backend.app.schemas.tags import TagCreate, TagFilter, TagRead
-from backend.app.schemas.work_items import WorkItemCreate, WorkItemRead
+from backend.app.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
+from backend.app.schemas.tags import TagCreate, TagRead
+from backend.app.schemas.work_items import WorkItemCreate, WorkItemListFilter, WorkItemRead
 from backend.app.services import projects as project_service
 from backend.app.services import tags as tag_service
 from backend.app.services import work_items as work_item_service
@@ -37,6 +37,28 @@ def list_projects() -> Response:
 def get_project(project_id: UUID) -> tuple[Response, int]:
     """Get a project."""
     project: ProjectRow = project_service.get_project(get_engine(), project_id)
+    return json_model(ProjectRead.model_validate(project))
+
+
+@projects_blueprint.patch("/projects/<uuid:project_id>")
+def update_project(project_id: UUID) -> tuple[Response, int]:
+    """Edit an active project's name or description."""
+    command: ProjectUpdate = parse_json(ProjectUpdate)
+    project: ProjectRow = project_service.update_project(get_engine(), project_id, command)
+    return json_model(ProjectRead.model_validate(project))
+
+
+@projects_blueprint.post("/projects/<uuid:project_id>/archive")
+def archive_project(project_id: UUID) -> tuple[Response, int]:
+    """Archive a project without deleting its history."""
+    project: ProjectRow = project_service.archive_project(get_engine(), project_id)
+    return json_model(ProjectRead.model_validate(project))
+
+
+@projects_blueprint.post("/projects/<uuid:project_id>/restore")
+def restore_project(project_id: UUID) -> tuple[Response, int]:
+    """Restore an archived project."""
+    project: ProjectRow = project_service.restore_project(get_engine(), project_id)
     return json_model(ProjectRead.model_validate(project))
 
 
@@ -68,9 +90,21 @@ def create_project_work_item(project_id: UUID) -> tuple[Response, int]:
 @projects_blueprint.get("/projects/<uuid:project_id>/work-items")
 def list_project_work_items(project_id: UUID) -> Response:
     """List a project's work items."""
-    filters: TagFilter = TagFilter.model_validate({"tag_ids": request.args.getlist("tag_id")})
+    filters: WorkItemListFilter = WorkItemListFilter.model_validate(
+        {
+            "tag_ids": request.args.getlist("tag_id"),
+            "search": request.args.get("search"),
+            "sort": request.args.get("sort", "priority"),
+            "direction": request.args.get("direction", "asc"),
+        }
+    )
     items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(
-        get_engine(), project_id, filter_tag_ids=filters.tag_ids
+        get_engine(),
+        project_id,
+        filter_tag_ids=filters.tag_ids,
+        search=filters.search,
+        sort=filters.sort,
+        direction=filters.direction,
     )
     return json_models([WorkItemRead.model_validate(item) for item in items])
 

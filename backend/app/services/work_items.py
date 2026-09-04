@@ -13,7 +13,7 @@ from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.repositories import tags as tag_repository
 from backend.app.repositories import work_items as work_item_repository
-from backend.app.schemas.work_items import StatusTransition, WorkItemCreate, WorkItemUpdate
+from backend.app.schemas.work_items import PriorityMove, StatusTransition, WorkItemCreate, WorkItemUpdate
 
 
 def create_work_item(
@@ -25,6 +25,7 @@ def create_work_item(
         project: ProjectRow | None = project_repository.get_project(connection, project_id)
         if project is None:
             raise not_found("Project", str(project_id))
+        ensure_project_is_active(project)
         selected_tags: list[TagRow] = validate_tags(connection, project_id, command.tag_ids)
         item: WorkItemRow = work_item_repository.create_work_item(
             connection,
@@ -35,7 +36,11 @@ def create_work_item(
                 "description": command.description,
                 "technical_description": command.technical_description,
                 "repository_url": command.repository_url,
+                "acceptance_criteria": command.acceptance_criteria,
                 "status": WorkItemStatus.TODO.value,
+                "priority": work_item_repository.next_priority(
+                    connection, project_id, WorkItemStatus.TODO.value
+                ),
             },
         )
         tag_repository.replace_work_item_tags(
@@ -52,6 +57,7 @@ def create_work_item(
                     "title": command.title,
                     "status": WorkItemStatus.TODO.value,
                     "tags": [tag["name"] for tag in selected_tags],
+                    "acceptance_criteria": command.acceptance_criteria,
                 },
             },
         )
@@ -59,14 +65,22 @@ def create_work_item(
 
 
 def list_work_items(
-    engine: Engine, project_id: UUID, *, filter_tag_ids: list[UUID] | None = None
+    engine: Engine,
+    project_id: UUID,
+    *,
+    filter_tag_ids: list[UUID] | None = None,
+    search: str | None = None,
+    sort: str = "priority",
+    direction: str = "asc",
 ) -> list[WorkItemWithTagsRow]:
     """List work items after confirming their project exists."""
     with engine.connect() as connection:
         project: ProjectRow | None = project_repository.get_project(connection, project_id)
         if project is None:
             raise not_found("Project", str(project_id))
-        items: list[WorkItemRow] = work_item_repository.list_work_items(connection, project_id)
+        items: list[WorkItemRow] = work_item_repository.list_work_items(
+            connection, project_id, search=search, sort=sort, direction=direction
+        )
         enriched: list[WorkItemWithTagsRow] = enrich_work_items(connection, items)
         if not filter_tag_ids:
             return enriched
@@ -90,6 +104,7 @@ def delete_work_item(engine: Engine, work_item_id: UUID) -> UUID:
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
+        ensure_work_item_project_is_active(connection, existing)
         deleted: bool = work_item_repository.delete_work_item(connection, work_item_id)
         if not deleted:
             raise not_found("Work item", str(work_item_id))
@@ -118,6 +133,7 @@ def update_work_item(
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
+        ensure_work_item_project_is_active(connection, existing)
 
         changes: dict[str, Any] = {}
         event_changes: dict[str, dict[str, str]] = {}
@@ -126,12 +142,13 @@ def update_work_item(
             "description",
             "technical_description",
             "repository_url",
+            "acceptance_criteria",
         ):
-            new_value: str | None = getattr(command, field_name)
+            new_value: Any = getattr(command, field_name)
             old_value: Any = existing[field_name]
             if new_value is not None and new_value != old_value:
                 changes[field_name] = new_value
-                event_changes[field_name] = {"from": str(old_value), "to": new_value}
+                event_changes[field_name] = {"from": old_value, "to": new_value}
 
         existing_tags: list[TagRow] = enrich_work_items(connection, [existing])[0]["tags"]
         selected_tags: list[TagRow] = existing_tags
@@ -180,6 +197,7 @@ def transition_work_item(
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
+        ensure_work_item_project_is_active(connection, existing)
         current: WorkItemStatus = WorkItemStatus(str(existing["status"]))
         target: WorkItemStatus = command.status
         if current == target:
@@ -194,7 +212,13 @@ def transition_work_item(
         updated: WorkItemRow | None = work_item_repository.update_work_item(
             connection,
             work_item_id,
-            {"status": target.value, "updated_at": datetime.now(UTC)},
+            {
+                "status": target.value,
+                "priority": work_item_repository.next_priority(
+                    connection, existing["project_id"], target.value
+                ),
+                "updated_at": datetime.now(UTC),
+            },
         )
         if updated is None:
             raise not_found("Work item", str(work_item_id))
@@ -211,6 +235,51 @@ def transition_work_item(
         return enrich_work_items(connection, [updated])[0]
 
 
+def move_work_item_priority(
+    engine: Engine, work_item_id: UUID, command: PriorityMove
+) -> WorkItemWithTagsRow:
+    """Swap a story with its adjacent priority peer in the current workflow lane."""
+    with engine.begin() as connection:
+        existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
+        if existing is None:
+            raise not_found("Work item", str(work_item_id))
+        ensure_work_item_project_is_active(connection, existing)
+        lane_items: list[WorkItemRow] = work_item_repository.list_work_items_by_status(
+            connection, existing["project_id"], existing["status"]
+        )
+        index: int = next(
+            position for position, item in enumerate(lane_items) if item["id"] == work_item_id
+        )
+        target_index: int = index - 1 if command.direction == "up" else index + 1
+        if target_index < 0 or target_index >= len(lane_items):
+            return enrich_work_items(connection, [existing])[0]
+        neighbor: WorkItemRow = lane_items[target_index]
+        now: datetime = datetime.now(UTC)
+        moved: WorkItemRow | None = work_item_repository.update_work_item(
+            connection, work_item_id, {"priority": neighbor["priority"], "updated_at": now}
+        )
+        work_item_repository.update_work_item(
+            connection, neighbor["id"], {"priority": existing["priority"], "updated_at": now}
+        )
+        if moved is None:
+            raise not_found("Work item", str(work_item_id))
+        activity_repository.create_activity_event(
+            connection,
+            {
+                "id": uuid4(),
+                "project_id": existing["project_id"],
+                "work_item_id": work_item_id,
+                "event_type": "work_item.priority_changed",
+                "details": {
+                    "direction": command.direction,
+                    "from": existing["priority"],
+                    "to": neighbor["priority"],
+                },
+            },
+        )
+        return enrich_work_items(connection, [moved])[0]
+
+
 def validate_tags(connection: Connection, project_id: UUID, tag_ids: list[UUID]) -> list[TagRow]:
     """Resolve tag IDs and reject tags outside the story's project."""
     selected: list[TagRow] = tag_repository.list_tags_by_ids(connection, project_id, tag_ids)
@@ -221,6 +290,20 @@ def validate_tags(connection: Connection, project_id: UUID, tag_ids: list[UUID])
             422,
         )
     return selected
+
+
+def ensure_project_is_active(project: ProjectRow) -> None:
+    """Reject writes into a project retained as read-only history."""
+    if project["archived_at"] is not None:
+        raise AppError("project_archived", "Archived projects are read-only.", 409)
+
+
+def ensure_work_item_project_is_active(connection: Connection, item: WorkItemRow) -> None:
+    """Resolve a story's project before a write so archived projects cannot change."""
+    project: ProjectRow | None = project_repository.get_project(connection, item["project_id"])
+    if project is None:
+        raise not_found("Project", str(item["project_id"]))
+    ensure_project_is_active(project)
 
 
 def enrich_work_item(item: WorkItemRow, item_tags: list[TagRow]) -> WorkItemWithTagsRow:

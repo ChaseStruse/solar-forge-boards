@@ -8,6 +8,7 @@ from backend.app.api.utils import json_model, parse_json
 from backend.app.database import get_engine
 from backend.app.models import WorkItemWithTagsRow
 from backend.app.schemas.work_items import (
+    PriorityMove,
     StatusTransition,
     WorkItemRead,
     WorkItemUpdate,
@@ -46,6 +47,16 @@ def transition_work_item(work_item_id: UUID) -> tuple[Response, int]:
     """Move a work item through its lifecycle."""
     command: StatusTransition = parse_json(StatusTransition)
     item: WorkItemWithTagsRow = work_item_service.transition_work_item(
+        get_engine(), work_item_id, command
+    )
+    return json_model(WorkItemRead.model_validate(item))
+
+
+@work_items_blueprint.post("/work-items/<uuid:work_item_id>/priority")
+def move_work_item_priority(work_item_id: UUID) -> tuple[Response, int]:
+    """Move a story up or down within its current workflow lane."""
+    command: PriorityMove = parse_json(PriorityMove)
+    item: WorkItemWithTagsRow = work_item_service.move_work_item_priority(
         get_engine(), work_item_id, command
     )
     return json_model(WorkItemRead.model_validate(item))

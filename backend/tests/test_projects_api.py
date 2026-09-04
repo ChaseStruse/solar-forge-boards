@@ -42,3 +42,32 @@ def test_missing_project_returns_not_found(client: FlaskClient) -> None:
     response = client.get("/api/v1/projects/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
     assert response.get_json()["error"]["code"] == "not_found"
+
+
+def test_project_can_be_edited_archived_and_restored(client: FlaskClient, project_id: str) -> None:
+    """Projects retain their history through a reversible, write-blocking archive state."""
+    updated = client.patch(
+        f"/api/v1/projects/{project_id}",
+        json={"name": "Solar Forge Core", "description": "Plan the foundation."},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["data"]["name"] == "Solar Forge Core"
+
+    archived = client.post(f"/api/v1/projects/{project_id}/archive")
+    assert archived.status_code == 200
+    assert archived.get_json()["data"]["archived_at"] is not None
+    assert (
+        client.post(
+            f"/api/v1/projects/{project_id}/work-items", json={"title": "Too late"}
+        ).get_json()["error"]["code"]
+        == "project_archived"
+    )
+
+    restored = client.post(f"/api/v1/projects/{project_id}/restore")
+    assert restored.status_code == 200
+    assert restored.get_json()["data"]["archived_at"] is None
+    event_types = {
+        event["event_type"]
+        for event in client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
+    }
+    assert {"project.updated", "project.archived", "project.restored"} <= event_types
