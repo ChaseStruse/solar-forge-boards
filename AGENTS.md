@@ -117,9 +117,9 @@ Allowed story transitions:
 
 | Current status | Allowed targets |
 | --- | --- |
-| `todo` | `in_progress`, `blocked`, `cancelled` |
+| `todo` | `in_progress`, `blocked`, `done`, `cancelled` |
 | `in_progress` | `todo`, `blocked`, `done`, `cancelled` |
-| `blocked` | `todo`, `in_progress`, `cancelled` |
+| `blocked` | `todo`, `in_progress`, `done`, `cancelled` |
 | `done` | `in_progress` |
 | `cancelled` | `todo` |
 

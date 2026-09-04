@@ -156,6 +156,15 @@ def test_valid_status_transition_creates_activity(
     )
 
 
+def test_todo_story_can_be_completed_directly(client: FlaskClient, work_item_id: str) -> None:
+    """A story can move directly from Todo to Done when no intermediate work is needed."""
+    response = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "done"}
+    )
+    assert response.status_code == 200
+    assert response.get_json()["data"]["status"] == "done"
+
+
 def test_priority_move_reorders_stories_within_their_lane(
     client: FlaskClient, project_id: str, work_item_id: str
 ) -> None:
@@ -191,16 +200,19 @@ def test_priority_move_reorders_stories_within_their_lane(
 
 
 def test_invalid_status_transition_is_rejected(client: FlaskClient, work_item_id: str) -> None:
-    """Lifecycle rules prevent jumping directly from todo to done."""
+    """Lifecycle rules keep cancelled stories from jumping directly to Done."""
+    cancelled = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "cancelled"}
+    )
+    assert cancelled.status_code == 200
     response = client.post(
-        f"/api/v1/work-items/{work_item_id}/transitions",
-        json={"status": "done"},
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "done"}
     )
     assert response.status_code == 409
     assert response.get_json()["error"]["code"] == "invalid_status_transition"
 
     fetched = client.get(f"/api/v1/work-items/{work_item_id}")
-    assert fetched.get_json()["data"]["status"] == "todo"
+    assert fetched.get_json()["data"]["status"] == "cancelled"
 
 
 def test_generic_update_cannot_bypass_transition_rules(

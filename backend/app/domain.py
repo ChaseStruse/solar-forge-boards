@@ -18,6 +18,7 @@ ALLOWED_TRANSITIONS: dict[WorkItemStatus, frozenset[WorkItemStatus]] = {
         {
             WorkItemStatus.IN_PROGRESS,
             WorkItemStatus.BLOCKED,
+            WorkItemStatus.DONE,
             WorkItemStatus.CANCELLED,
         }
     ),
@@ -33,6 +34,7 @@ ALLOWED_TRANSITIONS: dict[WorkItemStatus, frozenset[WorkItemStatus]] = {
         {
             WorkItemStatus.TODO,
             WorkItemStatus.IN_PROGRESS,
+            WorkItemStatus.DONE,
             WorkItemStatus.CANCELLED,
         }
     ),

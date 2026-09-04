@@ -43,9 +43,9 @@ Allowed destinations are:
 
 | Current lane | Allowed destinations |
 | --- | --- |
-| Todo | In Progress, Blocked, Cancelled |
+| Todo | In Progress, Blocked, Done, Cancelled |
 | In Progress | Todo, Blocked, Done, Cancelled |
-| Blocked | Todo, In Progress, Cancelled |
+| Blocked | Todo, In Progress, Done, Cancelled |
 | Done | In Progress |
 | Cancelled | Todo |
 
