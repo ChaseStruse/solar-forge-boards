@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong · Solar Forge Boards{% endblock %}
+{% block content %}
+<section class="empty-state error-page">
+  <p class="eyebrow">{{ error.status_code }}</p>
+  <h1>{{ error.message }}</h1>
+  <a href="{{ url_for('ui.projects_page') }}">Return to projects</a>
+</section>
+{% endblock %}

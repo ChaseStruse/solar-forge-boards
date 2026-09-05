@@ -1,0 +1,11 @@
+Alembic migration scripts for the Solar Forge Boards PostgreSQL schema.
+
+The version files in versions/ are the ordered production schema history. Update
+backend/app/models.py first, generate and inspect a revision, and commit both changes together.
+Apply the current schema with:
+
+    uv run alembic upgrade head
+
+Do not edit a revision that has already been applied to a shared database. Add a new revision
+instead, and preserve existing project and story data unless a destructive migration is explicitly
+required. See ../../docs/development.md for the complete local and Docker migration workflows.

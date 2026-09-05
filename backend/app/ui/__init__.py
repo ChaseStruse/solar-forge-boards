@@ -1,0 +1,1 @@
+"""Server-rendered presentation layer."""
