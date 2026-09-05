@@ -8,7 +8,9 @@ layer.
 Give Solar-Forge a narrowly scoped HTTP toolset backed by `/api/v1`:
 
 1. List and get projects to resolve business context.
-2. List project tags and list work items, optionally filtering by repeated tag IDs.
+2. List project tags and list work items, optionally filtering by repeated tag IDs. For a complete
+   project synchronization, set `limit`, retain the query controls, and follow `meta.next_cursor`
+   until it is null.
 3. Get a work item to read its human description, technical description, repository link, status,
    and embedded tag objects.
 4. Create work items from approved plans and assign only tags belonging to that project.
@@ -48,6 +50,11 @@ from the project before creating or updating a story; never reuse a tag ID from 
 Multiple `tag_id` list filters use OR semantics. For compound reasoning, retrieve the candidates and
 perform any required AND logic in the client. Because each returned story embeds its tags, the agent
 can classify results without another tag lookup.
+
+Story collection pagination is opt-in: use a `limit` of 1 through 100, then send the opaque
+`meta.next_cursor` alongside the identical `tag_id`, `search`, `sort`, and `direction` controls.
+Changing those controls invalidates the cursor. Omitting `limit` retains the full collection response
+for interactive board clients.
 
 Use `description` for the user need, business rules, and desired outcome. Use
 `technical_description` for architecture, constraints, acceptance details, and implementation notes.

@@ -139,6 +139,8 @@ class WorkItemListFilter(ApiModel):
     sort: Literal["priority", "created_at", "updated_at", "title", "status"] = "priority"
     direction: Literal["asc", "desc"] = "asc"
     tag_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    limit: int | None = Field(default=None, ge=1, le=100)
+    cursor: str | None = Field(default=None, max_length=2048)
 
     @field_validator("search")
     @classmethod
@@ -148,6 +150,13 @@ class WorkItemListFilter(ApiModel):
             return None
         stripped: str = value.strip()
         return stripped or None
+
+    @model_validator(mode="after")
+    def require_limit_for_cursor(self) -> WorkItemListFilter:
+        """Keep cursor traversal explicit and bounded."""
+        if self.cursor is not None and self.limit is None:
+            raise ValueError("A cursor requires a limit.")
+        return self
 
 
 class WorkItemRead(ApiModel):

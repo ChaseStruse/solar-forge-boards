@@ -15,8 +15,8 @@ the same Pydantic request and response schemas used by the public routes.
 }
 ```
 
-Unknown request properties are rejected. The API currently has no authentication, authorization,
-pagination, or rate limiting and must not be exposed to untrusted networks.
+Unknown request properties are rejected. The API currently has no authentication, authorization, or
+rate limiting and must not be exposed to untrusted networks.
 
 ## Endpoint summary
 
@@ -141,6 +141,16 @@ must belong to the project; otherwise the API returns `422 invalid_story_tags`. 
 story's title, description, or technical description case-insensitively. `sort` accepts
 `priority`, `created_at`, `updated_at`, `title`, or `status`, and `direction` accepts `asc` or
 `desc`. Without controls, stories are ordered by their persisted priority within each workflow lane.
+
+Add `limit` (from 1 through 100) to opt into cursor pagination. A paginated response includes
+`meta.next_cursor`; send that opaque value with the same `tag_id`, `search`, `sort`, and `direction`
+parameters to get the next page. `cursor` requires `limit`; changing collection controls or sending
+an invalid cursor returns `422 invalid_cursor`. Omit `limit` to retain the complete collection
+response used by the board.
+
+```text
+/api/v1/projects/{project_id}/work-items?search=agent&sort=updated_at&direction=desc&limit=50
+```
 
 ### Get, edit, or delete a story
 

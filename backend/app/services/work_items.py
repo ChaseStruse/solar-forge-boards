@@ -1,7 +1,10 @@
 """Work-item use cases and lifecycle rules."""
 
+import base64
+import binascii
+import json
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, Engine
@@ -19,6 +22,13 @@ from backend.app.schemas.work_items import (
     WorkItemCreate,
     WorkItemUpdate,
 )
+
+
+class WorkItemPage(TypedDict):
+    """A cursor page of stories and the continuation token, if any."""
+
+    items: list[WorkItemWithTagsRow]
+    next_cursor: str | None
 
 
 def create_work_item(
@@ -102,6 +112,57 @@ def get_work_item(engine: Engine, work_item_id: UUID) -> WorkItemWithTagsRow:
         if item is None:
             raise not_found("Work item", str(work_item_id))
         return enrich_work_items(connection, [item])[0]
+
+
+def list_work_items_page(
+    engine: Engine,
+    project_id: UUID,
+    *,
+    filter_tag_ids: list[UUID],
+    search: str | None,
+    sort: str,
+    direction: str,
+    limit: int,
+    cursor: str | None,
+) -> WorkItemPage:
+    """Return a stable cursor page for one complete filtered story collection."""
+    items: list[WorkItemWithTagsRow] = list_work_items(
+        engine,
+        project_id,
+        filter_tag_ids=filter_tag_ids,
+        search=search,
+        sort=sort,
+        direction=direction,
+    )
+    start: int = 0
+    if cursor is not None:
+        last_id: UUID = decode_cursor(
+            cursor,
+            search=search,
+            filter_tag_ids=filter_tag_ids,
+            sort=sort,
+            direction=direction,
+        )
+        try:
+            start = next(index + 1 for index, item in enumerate(items) if item["id"] == last_id)
+        except StopIteration as error:
+            raise AppError(
+                "invalid_cursor", "The cursor no longer belongs to this collection.", 422
+            ) from error
+    page_items: list[WorkItemWithTagsRow] = items[start : start + limit]
+    has_more: bool = start + limit < len(items)
+    next_cursor: str | None = (
+        encode_cursor(
+            page_items[-1]["id"],
+            search=search,
+            filter_tag_ids=filter_tag_ids,
+            sort=sort,
+            direction=direction,
+        )
+        if page_items and has_more
+        else None
+    )
+    return {"items": page_items, "next_cursor": next_cursor}
 
 
 def get_work_item_by_reference_number(engine: Engine, reference_number: int) -> WorkItemWithTagsRow:
@@ -321,6 +382,54 @@ def ensure_work_item_project_is_active(connection: Connection, item: WorkItemRow
     if project is None:
         raise not_found("Project", str(item["project_id"]))
     ensure_project_is_active(project)
+
+
+def encode_cursor(
+    last_id: UUID,
+    *,
+    search: str | None,
+    filter_tag_ids: list[UUID],
+    sort: str,
+    direction: str,
+) -> str:
+    """Create an opaque cursor bound to one query's filters and ordering."""
+    payload: dict[str, Any] = {
+        "v": 1,
+        "last_id": str(last_id),
+        "search": search,
+        "tag_ids": sorted(str(tag_id) for tag_id in set(filter_tag_ids)),
+        "sort": sort,
+        "direction": direction,
+    }
+    raw: bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_cursor(
+    cursor: str,
+    *,
+    search: str | None,
+    filter_tag_ids: list[UUID],
+    sort: str,
+    direction: str,
+) -> UUID:
+    """Validate an opaque cursor against the collection query it continues."""
+    try:
+        padded: str = cursor + "=" * (-len(cursor) % 4)
+        payload: dict[str, Any] = json.loads(base64.urlsafe_b64decode(padded))
+        last_id: UUID = UUID(str(payload["last_id"]))
+    except (binascii.Error, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AppError("invalid_cursor", "The cursor is invalid.", 422) from error
+    expected: dict[str, Any] = {
+        "v": 1,
+        "search": search,
+        "tag_ids": sorted(str(tag_id) for tag_id in set(filter_tag_ids)),
+        "sort": sort,
+        "direction": direction,
+    }
+    if any(payload.get(key) != value for key, value in expected.items()):
+        raise AppError("invalid_cursor", "The cursor does not match this collection query.", 422)
+    return last_id
 
 
 def enrich_work_item(item: WorkItemRow, item_tags: list[TagRow]) -> WorkItemWithTagsRow:

@@ -17,6 +17,11 @@ def json_model(model: BaseModel, *, status: int = 200) -> tuple[Response, int]:
     return jsonify({"data": model.model_dump(mode="json")}), status
 
 
-def json_models(models: list[BaseModel]) -> Response:
+def json_models(
+    models: list[BaseModel], *, next_cursor: str | None = None, include_page_meta: bool = False
+) -> Response:
     """Return a list of schemas in a stable data envelope."""
-    return jsonify({"data": [model.model_dump(mode="json") for model in models]})
+    payload: dict[str, Any] = {"data": [model.model_dump(mode="json") for model in models]}
+    if include_page_meta:
+        payload["meta"] = {"next_cursor": next_cursor}
+    return jsonify(payload)

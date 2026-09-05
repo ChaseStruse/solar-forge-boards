@@ -78,6 +78,55 @@ def uuid_parameter(name: str) -> dict[str, Any]:
     }
 
 
+def work_item_list_parameters() -> list[dict[str, Any]]:
+    """Describe story collection filters and the opt-in cursor traversal contract."""
+    return [
+        {
+            "name": "tag_id",
+            "in": "query",
+            "description": "Repeat to match stories with any selected project tag.",
+            "style": "form",
+            "explode": True,
+            "schema": {
+                "type": "array",
+                "items": {"type": "string", "format": "uuid"},
+                "maxItems": 20,
+            },
+        },
+        {
+            "name": "search",
+            "in": "query",
+            "schema": {"type": "string", "maxLength": 200},
+        },
+        {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+                "type": "string",
+                "enum": ["priority", "created_at", "updated_at", "title", "status"],
+                "default": "priority",
+            },
+        },
+        {
+            "name": "direction",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["asc", "desc"], "default": "asc"},
+        },
+        {
+            "name": "limit",
+            "in": "query",
+            "description": "Opt into cursor pagination with 1 to 100 stories per response.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 100},
+        },
+        {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation token from meta.next_cursor; requires limit.",
+            "schema": {"type": "string", "maxLength": 2048},
+        },
+    ]
+
+
 def generated_components(models: tuple[type[BaseModel], ...]) -> dict[str, Any]:
     """Generate reusable OpenAPI components, including Pydantic nested definitions."""
     components: dict[str, Any] = {}
@@ -149,7 +198,7 @@ def openapi_document() -> dict[str, Any]:
                 },
             },
             "/api/v1/projects/{project_id}/work-items": {
-                "parameters": [project_id],
+                "parameters": [project_id, *work_item_list_parameters()],
                 "get": {"responses": data_collection_response(WorkItemRead, "Project stories")},
                 "post": {
                     "requestBody": request_body(WorkItemCreate),

@@ -76,6 +76,58 @@ def test_work_item_acceptance_criteria_search_and_sort(
     assert invalid.status_code == 422
 
 
+def test_work_item_cursor_pagination_keeps_the_collection_query(
+    client: FlaskClient, project_id: str
+) -> None:
+    """Cursor pages continue the same search and reject a mismatched query."""
+    first = client.post(
+        f"/api/v1/projects/{project_id}/work-items", json={"title": "Sync contracts"}
+    ).get_json()["data"]
+    second = client.post(
+        f"/api/v1/projects/{project_id}/work-items", json={"title": "Sync plans"}
+    ).get_json()["data"]
+    client.post(f"/api/v1/projects/{project_id}/work-items", json={"title": "Unrelated"})
+
+    first_page = client.get(
+        f"/api/v1/projects/{project_id}/work-items",
+        query_string={"search": "sync", "sort": "title", "limit": 1},
+    )
+    assert first_page.status_code == 200
+    first_payload = first_page.get_json()
+    assert [item["id"] for item in first_payload["data"]] == [first["id"]]
+    cursor: str = first_payload["meta"]["next_cursor"]
+
+    second_page = client.get(
+        f"/api/v1/projects/{project_id}/work-items",
+        query_string={
+            "search": "sync",
+            "sort": "title",
+            "limit": 1,
+            "cursor": cursor,
+        },
+    )
+    assert second_page.status_code == 200
+    second_payload = second_page.get_json()
+    assert [item["id"] for item in second_payload["data"]] == [second["id"]]
+    assert second_payload["meta"]["next_cursor"] is None
+
+    mismatched = client.get(
+        f"/api/v1/projects/{project_id}/work-items",
+        query_string={"search": "different", "sort": "title", "limit": 1, "cursor": cursor},
+    )
+    assert mismatched.status_code == 422
+    assert mismatched.get_json()["error"]["code"] == "invalid_cursor"
+
+
+def test_work_item_cursor_requires_a_limit(client: FlaskClient, project_id: str) -> None:
+    """A continuation token cannot accidentally change an unpaginated response."""
+    response = client.get(
+        f"/api/v1/projects/{project_id}/work-items", query_string={"cursor": "not-a-token"}
+    )
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "validation_error"
+
+
 def test_repository_link_must_be_http_or_https(client: FlaskClient, project_id: str) -> None:
     """Repository links are safe to render as clickable card links."""
     response = client.post(

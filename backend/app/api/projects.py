@@ -96,8 +96,26 @@ def list_project_work_items(project_id: UUID) -> Response:
             "search": request.args.get("search"),
             "sort": request.args.get("sort", "priority"),
             "direction": request.args.get("direction", "asc"),
+            "limit": request.args.get("limit"),
+            "cursor": request.args.get("cursor"),
         }
     )
+    if filters.limit is not None:
+        page = work_item_service.list_work_items_page(
+            get_engine(),
+            project_id,
+            filter_tag_ids=filters.tag_ids,
+            search=filters.search,
+            sort=filters.sort,
+            direction=filters.direction,
+            limit=filters.limit,
+            cursor=filters.cursor,
+        )
+        return json_models(
+            [WorkItemRead.model_validate(item) for item in page["items"]],
+            next_cursor=page["next_cursor"],
+            include_page_meta=True,
+        )
     items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(
         get_engine(),
         project_id,
