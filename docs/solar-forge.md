@@ -16,6 +16,10 @@ Give Solar-Forge a narrowly scoped HTTP toolset backed by `/api/v1`:
 6. Request explicit status transitions as execution progresses.
 7. Read recent project activity to explain what changed.
 
+Fetch `GET /api/v1/openapi.json` when generating or validating the client tool definitions. The
+document is generated from the API's Pydantic schemas and public route contract; the repository also
+tests the same create, retrieve-by-reference, and transition flow used by Solar Forge clients.
+
 Use stable UUIDs as tool arguments and preserve the API error `code` in tool results. An invalid
 transition is a domain response the agent can reason about, not an infrastructure failure.
 

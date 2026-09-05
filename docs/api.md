@@ -4,6 +4,9 @@ The API base path is `/api/v1`. Requests and responses use JSON. Successful sing
 collections are wrapped in a `data` property. Datetimes are ISO 8601 strings and identifiers are
 UUIDs.
 
+The generated OpenAPI 3.1 contract is available at `GET /api/v1/openapi.json`. It is generated from
+the same Pydantic request and response schemas used by the public routes.
+
 ```json
 {
   "data": {
@@ -20,6 +23,7 @@ pagination, or rate limiting and must not be exposed to untrusted networks.
 | Method | Path | Result |
 | --- | --- | --- |
 | `POST` | `/api/v1/projects` | Create a project and its four default tags |
+| `GET` | `/api/v1/openapi.json` | Get the generated OpenAPI 3.1 contract |
 | `GET` | `/api/v1/projects` | List projects in creation order |
 | `GET` | `/api/v1/projects/{project_id}` | Get one project |
 | `PATCH` | `/api/v1/projects/{project_id}` | Edit an active project's name or description |

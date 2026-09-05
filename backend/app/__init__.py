@@ -9,6 +9,7 @@ from sqlalchemy import Engine
 from werkzeug.exceptions import HTTPException
 
 from backend.app.api.health import health_blueprint
+from backend.app.api.openapi import openapi_blueprint
 from backend.app.api.projects import projects_blueprint
 from backend.app.api.work_items import work_items_blueprint
 from backend.app.config import Settings, load_settings
@@ -37,6 +38,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.extensions["database_engine"] = engine
 
     app.register_blueprint(health_blueprint)
+    app.register_blueprint(openapi_blueprint)
     app.register_blueprint(projects_blueprint)
     app.register_blueprint(work_items_blueprint)
     app.register_blueprint(ui_blueprint)
