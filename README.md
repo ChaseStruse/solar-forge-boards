@@ -17,6 +17,7 @@ transitions, project-scoped tags, and an immutable activity trail.
 - Edit project details or archive a project into reversible, read-only history.
 - Switch between board presets or show and hide individual lanes. Saved lane visibility is local to
   the browser and project.
+- Link boards to GitHub repositories and view stats, latest releases, and release notes.
 - Connect model hosts through scoped Python agent tools with host approval and correlation tracing.
 - Use the same backend rules through the human-facing UI or the `/api/v1` JSON API.
 

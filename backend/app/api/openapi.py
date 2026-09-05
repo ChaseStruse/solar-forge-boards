@@ -6,6 +6,7 @@ from flask import Blueprint, Response, jsonify
 from pydantic import BaseModel
 
 from backend.app.schemas.common import ActivityEventRead
+from backend.app.schemas.github import GitHubRepository
 from backend.app.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from backend.app.schemas.tags import TagCreate, TagRead
 from backend.app.schemas.work_items import (
@@ -167,6 +168,7 @@ def openapi_document() -> dict[str, Any]:
     """Generate the OpenAPI 3.1 document from the public command and read schemas."""
     schemas: tuple[type[BaseModel], ...] = (
         ActivityEventRead,
+        GitHubRepository,
         PriorityMove,
         ProjectCreate,
         ProjectRead,
@@ -235,6 +237,12 @@ def openapi_document() -> dict[str, Any]:
                     "parameters": write_safety_parameters(conditional=False),
                     "requestBody": request_body(WorkItemCreate),
                     "responses": data_response(WorkItemRead, "201", "Story created"),
+                },
+            },
+            "/api/v1/projects/{project_id}/repositories": {
+                "parameters": [project_id],
+                "get": {
+                    "responses": data_collection_response(GitHubRepository, "GitHub repositories")
                 },
             },
             "/api/v1/projects/{project_id}/activity": {

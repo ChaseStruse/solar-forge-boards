@@ -34,6 +34,7 @@ services:
       DATABASE_URL: postgresql+psycopg://solar_forge_boards:solar_forge_boards@db:5432/solar_forge_boards
       FLASK_SECRET_KEY: local-development-secret
       FLASK_DEBUG: "1"
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     command: ["flask", "--app", "backend.app.wsgi:app", "run", "--debug", "--host=0.0.0.0", "--port=8000"]
     depends_on:
       migrate:

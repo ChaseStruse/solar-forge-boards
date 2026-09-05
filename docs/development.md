@@ -130,3 +130,29 @@ operational rollback, not a way to preserve reference allocation across subseque
 
 SQLite tests explicitly seed the same singleton after creating metadata and use modern transaction
 control so reservation savepoints roll back together with domain writes, matching PostgreSQL.
+
+## GitHub integration
+
+Migration `923c2fb8b1fc` adds the project `repository_urls` JSON column with an empty-list default,
+preserving existing projects and stories. Apply it before using this version. Its downgrade removes
+only the repository configuration column; existing story links remain. Upgrade/downgrade behavior
+is verified on an isolated PostgreSQL temporary table, in addition to the SQLite API/UI tests.
+
+The ignored local `.env` and committed `.env.example` contain an empty `GITHUB_TOKEN=` setting.
+Compose passes this optional value only to `web`. After filling it in, recreate the web container:
+
+```bash
+docker compose up -d --no-deps --force-recreate web
+```
+
+For a directly launched Flask process, export `GITHUB_TOKEN` before starting it; the application
+still does not load `.env` automatically. Never put tokens in repository URLs or commit `.env`.
+Public repositories can be read without a token. For private repositories, use a fine-grained token
+restricted to the needed repositories with read-only Contents and Metadata access. The token is
+server-only and is never returned in API errors, templates, or activity events. Restart the server
+after rotating the token, which also clears its process-local GitHub cache.
+
+The integration reads [repository metadata](https://docs.github.com/en/rest/repos/repos#get-a-repository)
+and [the latest release](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)
+using GitHub REST API version `2026-03-10`. There is no GitHub write access, OAuth flow, webhook,
+or per-user token storage in this local integration.

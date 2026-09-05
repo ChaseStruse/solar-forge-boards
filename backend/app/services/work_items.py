@@ -56,7 +56,11 @@ def create_work_item(
                 "title": command.title,
                 "description": command.description,
                 "technical_description": command.technical_description,
-                "repository_url": command.repository_url,
+                "repository_url": (
+                    command.repository_url
+                    if "repository_url" in command.model_fields_set
+                    else next(iter(project["repository_urls"]), "")
+                ),
                 "acceptance_criteria": command.acceptance_criteria,
                 "status": WorkItemStatus.TODO.value,
                 "priority": work_item_repository.next_priority(

@@ -67,7 +67,7 @@
               <label>Description <textarea name="description" maxlength="10000" rows="4">{{ item.description }}</textarea></label>
               <label>Technical description <textarea name="technical_description" maxlength="20000" rows="6">{{ item.technical_description }}</textarea></label>
               <label>Acceptance criteria <textarea name="acceptance_criteria" rows="5" maxlength="50099" placeholder="One verifiable outcome per line">{{ item.acceptance_criteria|join('\n') }}</textarea><span class="field-note">One clear, verifiable outcome per line.</span></label>
-              <label>Repository link <input name="repository_url" type="url" maxlength="2048" value="{{ item.repository_url }}" placeholder="https://github.com/organization/repository"></label>
+              <label>Repository link <input name="repository_url" list="project-repository-options" type="url" maxlength="2048" value="{{ item.repository_url }}" placeholder="https://github.com/organization/repository"></label>
               <fieldset class="tag-picker">
                 <legend>Tags</legend>
                 <div class="tag-options">

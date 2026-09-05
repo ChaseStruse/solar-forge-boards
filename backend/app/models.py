@@ -36,6 +36,7 @@ projects: Table = Table(
     metadata,
     Column("id", Uuid(as_uuid=True), primary_key=True),
     Column("name", String(120), nullable=False, unique=True),
+    Column("repository_urls", JSON, nullable=False, server_default="[]"),
     Column("description", Text, nullable=False, server_default=""),
     Column("archived_at", DateTime(timezone=True), nullable=True),
     Column("version", Integer, nullable=False, server_default="1"),
@@ -147,6 +148,7 @@ class ProjectRow(TypedDict):
 
     id: UUID
     name: str
+    repository_urls: list[str]
     description: str
     archived_at: datetime | None
     version: int

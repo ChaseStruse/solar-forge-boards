@@ -141,3 +141,17 @@ API request hooks bind a validated correlation ID to a context variable and retu
 header. A shared service helper attaches the ID to activity details before calling the repository
 within the existing transaction. Request teardown resets the context, including on errors. This
 uses the existing JSON details column and requires no migration or historical backfill.
+
+## GitHub repository integration
+
+Projects store an ordered JSON repository URL list, updated by the existing project service and
+transactional audit path. The first URL supplies the story-creation default only when callers omit
+the story's repository field; explicit empty values remain empty. This keeps UI and API semantics
+consistent without rewriting existing stories.
+
+The Repository tab and public snapshot endpoint call `services/github.py`, which resolves project
+settings before making network requests through `integrations/github.py`. No database connection
+is held during GitHub requests. The GitHub client holds a server-only environment token, bounds
+response sizes, timeouts and concurrency, sanitizes failures, and caches snapshots briefly. Templates
+receive typed snapshots and escape release notes as plain text. This is a single trusted local
+installation; future hosted credentials and authorization remain a separate design task.

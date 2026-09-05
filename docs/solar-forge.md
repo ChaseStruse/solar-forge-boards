@@ -151,3 +151,8 @@ same key and payload when retrying an uncertain outcome. There are no automatic 
 returns the current request's correlation header, while the original activity keeps its original
 trace. Deletion has no idempotency or ETag guarantee in the current API and must not be automatically
 retried after an uncertain response.
+
+Project commands also accept `repository_urls`, an ordered collection of up to ten GitHub URLs.
+The first is the default for story creation when `repository_url` is omitted; pass `""` to opt out.
+Clients can read `GET /api/v1/projects/{project_id}/repositories` for cached GitHub stats and release
+notes. GitHub credentials remain on the board server.

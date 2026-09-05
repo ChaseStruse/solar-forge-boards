@@ -281,3 +281,28 @@ Activity created by an API request includes the trace in `details.correlation_id
 same transaction as the domain change. Existing activity and non-API writes may omit it. No-op and
 failed commands create no new activity. Idempotent replays echo the retry's trace on the response
 and leave the original activity trace unchanged.
+
+## Project GitHub repositories
+
+Project create, read, and update schemas include `repository_urls`: an ordered list of at most ten
+complete `https://github.com/owner/repository` URLs. The server trims whitespace, lowercases and
+normalizes trailing `/` and `.git`, and removes duplicates while preserving order. Credentials,
+query strings, fragments, extra path segments, and non-GitHub hosts are rejected. Creation defaults
+to `[]`; updates preserve the list when omitted or null and clear it with `[]`. These changes use
+the existing project version checks, idempotency, archive guards, and `project.updated` activity.
+
+When creating a story, omitting `repository_url` defaults it to the project's first repository, or
+an empty string when none is configured. Explicit values, including `""`, are honored. Story edits
+and existing story links are unaffected by project repository changes.
+
+`GET /api/v1/projects/{project_id}/repositories` returns a `data` array of GitHub snapshots, in
+configured order. Each contains `url`, `name`, `description`, nullable `stars`, `forks`, `open_issues`
+(including pull requests), `default_branch`, `release`, `error`, and `release_error`. A release has
+`name`, `tag`, `url`, `notes`, and nullable `published_at`. GitHub's latest stable release endpoint is
+used; draft and prerelease entries are excluded. No published release yields `release: null`.
+
+Upstream errors are sanitized per repository inside a successful collection response; release
+failures preserve available repository stats. Unknown projects return 404 before network access.
+Requests go only to GitHub's API, with no redirects, a five-second socket timeout, a two-megabyte
+response bound, and up to four concurrent repositories. Successful and failed snapshots are cached
+for 60 seconds per process (up to 128 entries). Board and activity views do not fetch GitHub stats.

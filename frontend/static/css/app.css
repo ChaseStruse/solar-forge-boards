@@ -469,3 +469,19 @@ button:hover, .story-composer > summary:hover { transform: translateY(-1px); box
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+
+.repository-panel { padding: clamp(16px, 3vw, 28px); border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.repository-settings { margin: 24px 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; }
+.repository-settings summary, .repository-release summary { cursor: pointer; color: var(--accent); }
+.repository-settings form { display: grid; gap: 12px; margin-top: 18px; }
+.repository-settings button { justify-self: start; }
+.repository-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 20px; margin-top: 24px; }
+.repository-card { min-width: 0; padding: 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow-wrap: anywhere; }
+.repository-card h3 { margin: 8px 0 16px; font-size: 1.3rem; }
+.repository-card h4 { margin: 10px 0; font-size: 1.1rem; }
+.repository-card a { text-decoration-color: var(--accent); text-underline-offset: 4px; }
+.repository-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 24px 0; }
+.repository-stats dt { color: var(--muted); font-size: .8rem; }
+.repository-stats dd { margin: 6px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; }
+.repository-release { border-top: 1px solid var(--line); padding-top: 20px; }
+.release-notes { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; max-height: 420px; overflow: auto; }

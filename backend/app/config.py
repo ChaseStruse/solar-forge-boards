@@ -11,6 +11,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     database_url: str
+    github_token: str = ""
     secret_key: str
 
 
@@ -21,5 +22,6 @@ def load_settings() -> Settings:
             "DATABASE_URL",
             "postgresql+psycopg://solar_forge_boards:solar_forge_boards@localhost:5432/solar_forge_boards",
         ),
+        github_token=os.getenv("GITHUB_TOKEN", ""),
         secret_key=os.getenv("FLASK_SECRET_KEY", "development-only-secret"),
     )

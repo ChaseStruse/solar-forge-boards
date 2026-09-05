@@ -1,0 +1,36 @@
+<section class="repository-panel" aria-labelledby="repository-title">
+  <div class="section-header"><div><p class="eyebrow">Connected code</p><h2 id="repository-title">Repositories</h2></div><a class="button-secondary" href="{{ url_for('ui.project_board', project_id=project.id, tab='repository') }}">Refresh</a></div>
+  <p class="field-note">GitHub snapshots refresh at most once a minute. The first repository is the default for new stories.</p>
+  {% if not project.archived_at %}
+  <details class="repository-settings" {% if not project.repository_urls or project_error %}open{% endif %}>
+    <summary>Manage repositories</summary>
+    <form method="post" action="{{ url_for('ui.update_project_repositories', project_id=project.id) }}">
+      {% if project_error %}<p class="form-error" role="alert">{{ project_error }}</p>{% endif %}
+      <label>GitHub repository URLs <textarea name="repository_urls" rows="4" maxlength="2500" placeholder="https://github.com/organization/repository">{{ request.form.get('repository_urls', project.repository_urls|join('\n')) }}</textarea></label>
+      <p class="field-note">One URL per line, up to ten. Reorder this list to change the default. Removing a link keeps existing stories unchanged.</p>
+      <button type="submit">Save repositories</button>
+    </form>
+  </details>
+  {% endif %}
+  <div class="repository-grid">
+    {% for repository in repositories %}
+    <article class="repository-card">
+      <p class="eyebrow">{{ 'Default repository' if loop.first else 'Linked repository' }}</p>
+      <h3><a href="{{ repository.url }}" target="_blank" rel="noopener noreferrer">{{ repository.name }} ↗</a></h3>
+      {% if repository.error %}<p class="form-error">{{ repository.error }}</p>
+      {% else %}
+      <p>{{ repository.description or 'No repository description.' }}</p>
+      <dl class="repository-stats"><div><dt>Stars</dt><dd>{{ repository.stars }}</dd></div><div><dt>Forks</dt><dd>{{ repository.forks }}</dd></div><div><dt>Open issues + PRs</dt><dd>{{ repository.open_issues }}</dd></div><div><dt>Default branch</dt><dd>{{ repository.default_branch }}</dd></div></dl>
+      <section class="repository-release"><p class="eyebrow">Latest release</p>
+        {% if repository.release_error %}<p class="form-error">{{ repository.release_error }}</p>
+        {% elif repository.release %}
+        <h4><a href="{{ repository.release.url }}" target="_blank" rel="noopener noreferrer">{{ repository.release.name }} ↗</a></h4>
+        <p class="field-note">{{ repository.release.tag }}{% if repository.release.published_at %} · {{ repository.release.published_at[:10] }}{% endif %}</p>
+        <details><summary>Release notes</summary><pre class="release-notes">{{ repository.release.notes or 'No release notes published.' }}</pre></details>
+        {% else %}<p class="field-note">No published stable release found.</p>{% endif %}
+      </section>
+      {% endif %}
+    </article>
+    {% else %}<p class="empty-state">Connect a GitHub repository to see its stats and latest release here.</p>{% endfor %}
+  </div>
+</section>
