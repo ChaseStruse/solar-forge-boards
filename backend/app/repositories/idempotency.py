@@ -2,7 +2,7 @@
 
 from typing import Any, cast
 
-from sqlalchemy import Connection, Result, delete, insert, select, update
+from sqlalchemy import Connection, Result, insert, select, update
 
 from backend.app.models import IdempotencyRequestRow, idempotency_requests
 
@@ -38,8 +38,3 @@ def complete_request(
         .where(idempotency_requests.c.key == key)
         .values(response_status=response_status, response_data=response_data)
     )
-
-
-def delete_request(connection: Connection, key: str) -> None:
-    """Release a reservation when its write did not complete."""
-    connection.execute(delete(idempotency_requests).where(idempotency_requests.c.key == key))

@@ -1,5 +1,6 @@
 """Server-rendered and HTMX presentation tests."""
 
+import pytest
 from flask.testing import FlaskClient
 
 
@@ -166,3 +167,39 @@ def test_archived_project_board_is_read_only(client: FlaskClient, project_id: st
     assert b"This project is read-only." in board.data
     assert b"Restore project" in board.data
     assert b"Forge a story" not in board.data
+
+
+@pytest.mark.parametrize("operation", ["create", "update", "transitions", "priority", "delete"])
+def test_story_writes_preserve_search_and_sort(
+    client: FlaskClient, project_id: str, operation: str
+) -> None:
+    """Every HTMX write keeps the same board query in its response and next forms."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    items = [
+        client.post(collection, json={"title": title}).get_json()["data"]
+        for title in ["Match A", "Match Z", "Unrelated"]
+    ]
+    query = {"search": "Match", "sort": "title", "direction": "desc"}
+    page = client.get(f"/ui/projects/{project_id}", query_string=query).get_data(as_text=True)
+    assert "search=Match" in page and "direction=desc" in page
+    if operation == "create":
+        path = f"/ui/projects/{project_id}/work-items"
+        payload = {"title": "Unrelated new"}
+    else:
+        path = f"/ui/work-items/{items[2]['id']}"
+        payload = {"title": "Unrelated updated"}
+        if operation != "update":
+            path += f"/{operation}"
+            payload = (
+                {"status": "in_progress"}
+                if operation == "transitions"
+                else {"direction": "up"}
+                if operation == "priority"
+                else {}
+            )
+    response = client.post(path, query_string=query, data=payload, headers={"HX-Request": "true"})
+    assert response.status_code in {200, 201}
+    html = response.get_data(as_text=True)
+    assert "Unrelated" not in html
+    assert html.index("Match Z") < html.index("Match A")
+    assert "search=Match" in html and "direction=desc" in html

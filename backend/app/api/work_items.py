@@ -47,9 +47,9 @@ def update_work_item(work_item_id: UUID) -> tuple[Response, int]:
         expected_version=expected_version,
         model_type=WorkItemRead,
         status=200,
-        operation=lambda: WorkItemRead.model_validate(
+        operation=lambda connection: WorkItemRead.model_validate(
             work_item_service.update_work_item(
-                get_engine(), work_item_id, command, expected_version=expected_version
+                connection, work_item_id, command, expected_version=expected_version
             )
         ),
     )
@@ -75,9 +75,9 @@ def transition_work_item(work_item_id: UUID) -> tuple[Response, int]:
         expected_version=expected_version,
         model_type=WorkItemRead,
         status=200,
-        operation=lambda: WorkItemRead.model_validate(
+        operation=lambda connection: WorkItemRead.model_validate(
             work_item_service.transition_work_item(
-                get_engine(), work_item_id, command, expected_version=expected_version
+                connection, work_item_id, command, expected_version=expected_version
             )
         ),
     )
@@ -96,9 +96,9 @@ def move_work_item_priority(work_item_id: UUID) -> tuple[Response, int]:
         expected_version=expected_version,
         model_type=WorkItemRead,
         status=200,
-        operation=lambda: WorkItemRead.model_validate(
+        operation=lambda connection: WorkItemRead.model_validate(
             work_item_service.move_work_item_priority(
-                get_engine(), work_item_id, command, expected_version=expected_version
+                connection, work_item_id, command, expected_version=expected_version
             )
         ),
     )

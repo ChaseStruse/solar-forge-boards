@@ -17,7 +17,7 @@ from sqlalchemy import (
     update,
 )
 
-from backend.app.models import WorkItemRow, work_items
+from backend.app.models import WorkItemRow, story_reference_counter, work_item_tags, work_items
 
 
 def create_work_item(connection: Connection, values: dict[str, Any]) -> WorkItemRow:
@@ -35,6 +35,10 @@ def list_work_items(
     search: str | None = None,
     sort: str = "created_at",
     direction: str = "asc",
+    filter_tag_ids: list[UUID] | None = None,
+    limit: int | None = None,
+    after: WorkItemRow | None = None,
+    work_item_id: UUID | None = None,
 ) -> list[WorkItemRow]:
     """Return filtered, ordered work items for one project."""
     sort_columns: dict[str, Any] = {
@@ -60,6 +64,25 @@ def list_work_items(
                 work_items.c.technical_description.ilike(pattern),
             )
         )
+    if filter_tag_ids:
+        query = query.where(
+            work_items.c.id.in_(
+                select(work_item_tags.c.work_item_id).where(
+                    work_item_tags.c.tag_id.in_(filter_tag_ids)
+                )
+            )
+        )
+    if work_item_id is not None:
+        query = query.where(work_items.c.id == work_item_id)
+    if after is not None:
+        # Compare the stored sort value directly, avoiding datetime re-encoding differences.
+        value = select(sort_column).where(work_items.c.id == after["id"]).scalar_subquery()
+        comparison = sort_column < value if direction == "desc" else sort_column > value
+        query = query.where(
+            or_(comparison, and_(sort_column == value, work_items.c.id > after["id"]))
+        )
+    if limit is not None:
+        query = query.limit(limit)
     result: Result[Any] = connection.execute(query)
     return [cast(WorkItemRow, dict(row)) for row in result.mappings().all()]
 
@@ -87,7 +110,10 @@ def get_work_item_by_reference_number(
 def next_reference_number(connection: Connection) -> int:
     """Return the next global story reference number."""
     result: Result[Any] = connection.execute(
-        select(func.coalesce(func.max(work_items.c.reference_number), 0) + 1)
+        update(story_reference_counter)
+        .where(story_reference_counter.c.id == 1)
+        .values(value=story_reference_counter.c.value + 1)
+        .returning(story_reference_counter.c.value)
     )
     return int(result.scalar_one())
 

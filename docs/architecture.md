@@ -24,7 +24,9 @@ Neither layer contains lifecycle or persistence rules.
 
 `backend/app/services/` owns use cases, business rules, and transaction boundaries. A meaningful
 write and its activity event share one transaction. Services are functions rather than stateful
-classes; dependencies such as the SQLAlchemy engine are explicit arguments.
+classes; dependencies such as the SQLAlchemy engine are explicit arguments. Write use cases can
+also participate in an existing service-owned connection transaction. Shared helpers enforce archive
+and revision preconditions, including no-op writes.
 
 ### Repositories
 
@@ -87,11 +89,19 @@ readable history, while service-layer checks reject writes consistently for API 
 Acceptance criteria are an ordered JSON collection on a work item so their edits remain part of the
 same transactional story update and activity event.
 
-The public JSON API accepts persistent idempotency keys for creations and mutations. The API stores
-the original successful response and replays it for an identical retry, preventing an agent timeout
+The public JSON API accepts persistent idempotency keys for creations and mutations. A service transaction stores
+the domain change, activity, and original successful response atomically and replays it for an identical retry, preventing an agent timeout
 from becoming a duplicate write. Projects and stories use monotonically increasing revisions; an
 agent can send the returned ETag in `If-Match` to reject a stale write before it overwrites a newer
 revision. The server-rendered UI remains compatible by omitting that optional API precondition.
+
+Story references come from an atomically incremented singleton counter, retained after story
+deletion. Migration seeds it from the largest existing reference without renumbering stories.
+Collection queries apply tag filters and keyset pagination in SQL, with UUID tie-breaking and a
+batched tag query for only the returned page.
+
+Full-page and HTMX board rendering share one context builder. Story forms carry search and sort
+parameters in their action URLs, preserving the active query across swaps.
 
 New projects receive their four default tags in the same transaction as project creation. Work-item
 responses embed their ordered tag objects so agent and UI clients do not need an N+1 lookup pattern.

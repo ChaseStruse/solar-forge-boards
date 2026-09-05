@@ -24,13 +24,15 @@ JSON creation endpoints, project updates and archiving, and story updates, trans
 moves accept an optional `Idempotency-Key` header. Generate a new key for each intended write and
 retain it while retrying after a timeout or lost response. Repeating the same endpoint and payload
 with the same key returns the original successful response without running the write again. Reusing
-a key for a different request returns `409 idempotency_key_reused`.
+a key for a different request returns `409 idempotency_key_reused`. The domain write, activity,
+and saved response commit together; a failure rolls them all back so the key can be retried.
 
 Projects and stories include an integer `version`. Their single-resource `GET` responses and write
 responses include a quoted `ETag`, such as `"3"`. Agent clients should send that value in
 `If-Match` for project updates/archive changes and story updates, transitions, and priority moves.
 If another writer has changed the resource first, the request returns `409 version_conflict` instead
-of overwriting newer data. The headers remain optional for compatibility with the browser UI and
+of overwriting newer data. This check also applies to no-op commands. An identical idempotent
+retry still replays its original response before evaluating the current resource revision. The headers remain optional for compatibility with the browser UI and
 existing clients.
 
 ## Endpoint summary
@@ -136,7 +138,8 @@ Returns `201`. New work items begin in `todo`. Field limits are:
 | `tag_ids` | Optional, at most 20 unique UUIDs belonging to this project |
 
 All work-item responses include a globally unique integer `reference_number` for human and agent
-reference, alongside their internal UUID. They embed complete tag objects in `tags`, allowing a
+reference, alongside their internal UUID. A durable counter prevents deletion from recycling
+numbers allocated after migration `20260905_0009`. They embed complete tag objects in `tags`, allowing a
 client to classify a story without another request. Use
 `GET /api/v1/work-items/by-reference/{reference_number}` when a conversation or pull request only
 has the visible number.
@@ -161,7 +164,9 @@ Add `limit` (from 1 through 100) to opt into cursor pagination. A paginated resp
 `meta.next_cursor`; send that opaque value with the same `tag_id`, `search`, `sort`, and `direction`
 parameters to get the next page. `cursor` requires `limit`; changing collection controls or sending
 an invalid cursor returns `422 invalid_cursor`. Omit `limit` to retain the complete collection
-response used by the board.
+response used by the board. Filtering and page limits are applied in the database; only returned
+stories have their tags loaded. Cursors traverse current data, not a snapshot: if the last story is
+deleted or no longer matches the filters, restart traversal after `422 invalid_cursor`.
 
 ```text
 /api/v1/projects/{project_id}/work-items?search=agent&sort=updated_at&direction=desc&limit=50

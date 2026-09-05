@@ -72,7 +72,8 @@ Tags cannot currently be renamed or deleted.
 ## Search, sorting, and history
 
 Use the search field at the top of the board to find stories by title, description, or technical
-notes. The sort controls apply on the server, so they work consistently with the JSON API. Open the
+notes. The sort controls apply on the server, so they work consistently with the JSON API. Creating, editing, moving, or deleting a story preserves
+the active search and sort; a story that no longer matches the search disappears from that view. Open the
 **Activity** tab to review the latest 50 project events, including project edits and archive changes.
 Agent and integration clients can paginate a story collection with an API `limit` and its returned
 cursor; the browser board continues to load the complete board.

@@ -30,8 +30,8 @@ def create_project() -> tuple[Response, int]:
         expected_version=None,
         model_type=ProjectRead,
         status=201,
-        operation=lambda: ProjectRead.model_validate(
-            project_service.create_project(get_engine(), command)
+        operation=lambda connection: ProjectRead.model_validate(
+            project_service.create_project(connection, command)
         ),
     )
     return json_model(project, status=status, etag=project.version)
@@ -63,9 +63,9 @@ def update_project(project_id: UUID) -> tuple[Response, int]:
         expected_version=expected_version,
         model_type=ProjectRead,
         status=200,
-        operation=lambda: ProjectRead.model_validate(
+        operation=lambda connection: ProjectRead.model_validate(
             project_service.update_project(
-                get_engine(), project_id, command, expected_version=expected_version
+                connection, project_id, command, expected_version=expected_version
             )
         ),
     )
@@ -83,9 +83,9 @@ def archive_project(project_id: UUID) -> tuple[Response, int]:
         expected_version=expected_version,
         model_type=ProjectRead,
         status=200,
-        operation=lambda: ProjectRead.model_validate(
+        operation=lambda connection: ProjectRead.model_validate(
             project_service.archive_project(
-                get_engine(), project_id, expected_version=expected_version
+                connection, project_id, expected_version=expected_version
             )
         ),
     )
@@ -103,9 +103,9 @@ def restore_project(project_id: UUID) -> tuple[Response, int]:
         expected_version=expected_version,
         model_type=ProjectRead,
         status=200,
-        operation=lambda: ProjectRead.model_validate(
+        operation=lambda connection: ProjectRead.model_validate(
             project_service.restore_project(
-                get_engine(), project_id, expected_version=expected_version
+                connection, project_id, expected_version=expected_version
             )
         ),
     )
@@ -123,8 +123,8 @@ def create_project_tag(project_id: UUID) -> tuple[Response, int]:
         expected_version=None,
         model_type=TagRead,
         status=201,
-        operation=lambda: TagRead.model_validate(
-            tag_service.create_tag(get_engine(), project_id, command)
+        operation=lambda connection: TagRead.model_validate(
+            tag_service.create_tag(connection, project_id, command)
         ),
     )
     return json_model(tag, status=status)
@@ -148,8 +148,8 @@ def create_project_work_item(project_id: UUID) -> tuple[Response, int]:
         expected_version=None,
         model_type=WorkItemRead,
         status=201,
-        operation=lambda: WorkItemRead.model_validate(
-            work_item_service.create_work_item(get_engine(), project_id, command)
+        operation=lambda connection: WorkItemRead.model_validate(
+            work_item_service.create_work_item(connection, project_id, command)
         ),
     )
     return json_model(item, status=status, etag=item.version)

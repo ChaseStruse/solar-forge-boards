@@ -9,7 +9,7 @@ from flask.testing import FlaskClient
 from sqlalchemy import Engine
 
 from backend.app import create_app
-from backend.app.models import metadata
+from backend.app.models import metadata, story_reference_counter
 
 
 @pytest.fixture
@@ -25,6 +25,8 @@ def app(tmp_path: Path) -> Iterator[Flask]:
     )
     engine: Engine = application.extensions["database_engine"]
     metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(story_reference_counter.insert().values(id=1, value=0))
     yield application
     metadata.drop_all(engine)
     engine.dispose()

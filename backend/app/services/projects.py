@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
 from backend.app.errors import AppError, not_found, version_conflict
@@ -13,13 +13,14 @@ from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.schemas.projects import ProjectCreate, ProjectUpdate
 from backend.app.services import tags as tag_service
+from backend.app.services.common import require_active_project, require_version, transaction
 
 
-def create_project(engine: Engine, command: ProjectCreate) -> ProjectRow:
+def create_project(engine: Engine | Connection, command: ProjectCreate) -> ProjectRow:
     """Create a project and its initial activity event atomically."""
     project_id: UUID = uuid4()
     try:
-        with engine.begin() as connection:
+        with transaction(engine) as connection:
             project: ProjectRow = project_repository.create_project(
                 connection,
                 {
@@ -64,7 +65,7 @@ def get_project(engine: Engine, project_id: UUID, *, html: bool = False) -> Proj
 
 
 def update_project(
-    engine: Engine,
+    engine: Engine | Connection,
     project_id: UUID,
     command: ProjectUpdate,
     *,
@@ -72,10 +73,11 @@ def update_project(
 ) -> ProjectRow:
     """Update project details and retain an auditable record of meaningful changes."""
     try:
-        with engine.begin() as connection:
+        with transaction(engine) as connection:
             existing: ProjectRow | None = project_repository.get_project(connection, project_id)
             if existing is None:
                 raise not_found("Project", str(project_id))
+            require_version(existing["version"], expected_version)
             require_active_project(existing)
             changes: dict[str, Any] = {}
             event_changes: dict[str, dict[str, str]] = {}
@@ -116,7 +118,7 @@ def update_project(
 
 
 def archive_project(
-    engine: Engine, project_id: UUID, *, expected_version: int | None = None
+    engine: Engine | Connection, project_id: UUID, *, expected_version: int | None = None
 ) -> ProjectRow:
     """Archive a project, preserving all of its data as read-only history."""
     return set_project_archived(
@@ -125,7 +127,7 @@ def archive_project(
 
 
 def restore_project(
-    engine: Engine, project_id: UUID, *, expected_version: int | None = None
+    engine: Engine | Connection, project_id: UUID, *, expected_version: int | None = None
 ) -> ProjectRow:
     """Restore an archived project to active planning."""
     return set_project_archived(
@@ -134,17 +136,18 @@ def restore_project(
 
 
 def set_project_archived(
-    engine: Engine,
+    engine: Engine | Connection,
     project_id: UUID,
     *,
     archived: bool,
     expected_version: int | None = None,
 ) -> ProjectRow:
     """Set the reversible project archive state and emit an activity event when it changes."""
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         existing: ProjectRow | None = project_repository.get_project(connection, project_id)
         if existing is None:
             raise not_found("Project", str(project_id))
+        require_version(existing["version"], expected_version)
         currently_archived: bool = existing["archived_at"] is not None
         if currently_archived == archived:
             return existing
@@ -174,12 +177,6 @@ def set_project_archived(
             },
         )
         return updated
-
-
-def require_active_project(project: ProjectRow) -> None:
-    """Prevent domain writes against archived projects."""
-    if project["archived_at"] is not None:
-        raise AppError("project_archived", "Archived projects are read-only.", 409)
 
 
 def list_project_activity(engine: Engine, project_id: UUID) -> list[ActivityRow]:

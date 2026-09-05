@@ -10,6 +10,7 @@ from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.repositories import tags as tag_repository
 from backend.app.schemas.tags import TagCreate
+from backend.app.services.common import require_active_project, transaction
 
 DEFAULT_TAGS: tuple[tuple[str, str], ...] = (
     ("Business", "#ff5fa2"),
@@ -30,14 +31,13 @@ def create_default_tags(connection: Connection, project_id: UUID) -> list[TagRow
     ]
 
 
-def create_tag(engine: Engine, project_id: UUID, command: TagCreate) -> TagRow:
+def create_tag(engine: Engine | Connection, project_id: UUID, command: TagCreate) -> TagRow:
     """Create a case-insensitively unique tag within a project."""
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         project: ProjectRow | None = project_repository.get_project(connection, project_id)
         if project is None:
             raise not_found("Project", str(project_id))
-        if project["archived_at"] is not None:
-            raise AppError("project_archived", "Archived projects are read-only.", 409)
+        require_active_project(project)
         existing: list[TagRow] = tag_repository.list_project_tags(connection, project_id)
         if any(tag["name"].casefold() == command.name.casefold() for tag in existing):
             raise AppError(

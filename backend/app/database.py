@@ -9,15 +9,20 @@ from sqlalchemy import Engine, create_engine, event
 def enable_sqlite_foreign_keys(dbapi_connection: Any, connection_record: Any) -> None:
     """Match PostgreSQL foreign-key behavior in local SQLite databases."""
     del connection_record
+    autocommit = dbapi_connection.autocommit
+    dbapi_connection.autocommit = True
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+    dbapi_connection.autocommit = autocommit
 
 
 def create_database_engine(database_url: str) -> Engine:
     """Create a SQLAlchemy engine with healthy connection defaults."""
     connect_args: dict[str, bool] = (
-        {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+        {"check_same_thread": False, "autocommit": False}
+        if database_url.startswith("sqlite")
+        else {}
     )
     engine: Engine = create_engine(
         database_url,

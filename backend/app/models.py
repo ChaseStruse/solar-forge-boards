@@ -23,6 +23,14 @@ from sqlalchemy.schema import Column
 
 metadata: MetaData = MetaData()
 
+story_reference_counter: Table = Table(
+    "story_reference_counter",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("value", Integer, nullable=False),
+    CheckConstraint("id = 1", name="ck_story_reference_counter_singleton"),
+)
+
 projects: Table = Table(
     "projects",
     metadata,

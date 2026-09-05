@@ -1,5 +1,6 @@
 """Project API behavior."""
 
+import pytest
 from flask.testing import FlaskClient
 
 
@@ -95,3 +96,20 @@ def test_project_conditional_write_rejects_a_stale_etag(
     )
     assert stale.status_code == 409
     assert stale.get_json()["error"]["code"] == "version_conflict"
+
+
+@pytest.mark.parametrize("operation", ["update", "archive", "restore"])
+def test_stale_noop_project_write_is_rejected(
+    client: FlaskClient, project_id: str, operation: str
+) -> None:
+    """Project no-ops enforce revisions just like meaningful writes."""
+    path = f"/api/v1/projects/{project_id}"
+    client.patch(path, json={"name": "Current"})
+    if operation == "archive":
+        client.post(f"{path}/archive")
+    if operation == "update":
+        response = client.patch(path, json={"name": "Current"}, headers={"If-Match": '"1"'})
+    else:
+        response = client.post(f"{path}/{operation}", headers={"If-Match": '"1"'})
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "version_conflict"

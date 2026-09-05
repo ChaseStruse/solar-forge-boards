@@ -119,3 +119,14 @@ safe for public exposure.
 The base template loads DM Sans and Space Grotesk from Google Fonts and HTMX 2.0.8 from unpkg. No
 Node build is required. Browser access to those CDNs is currently required for the intended fonts
 and HTMX behavior. Consider vendoring these pinned assets before an offline or production deployment.
+
+## Reference counter migration
+
+Migration `20260905_0009` adds and seeds a durable story reference counter from existing rows.
+Apply it before running the updated application; existing story numbers and project data stay intact.
+References deleted before this migration cannot be recovered from the old activity payloads, so the
+non-reuse guarantee starts with the seeded counter. Downgrading removes counter history; it is an
+operational rollback, not a way to preserve reference allocation across subsequent upgrades.
+
+SQLite tests explicitly seed the same singleton after creating metadata and use modern transaction
+control so reservation savepoints roll back together with domain writes, matching PostgreSQL.

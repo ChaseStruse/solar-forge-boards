@@ -17,7 +17,7 @@
   {% else %}
   <details class="story-composer">
     <summary><span aria-hidden="true">＋</span> Forge a story</summary>
-    <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) { this.reset(); this.closest('details').removeAttribute('open'); }">
+    <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id, **board_query) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) { this.reset(); this.closest('details').removeAttribute('open'); }">
       <div class="form-intro">
         <p class="eyebrow">New story</p>
         <h2>Shape the next piece of work</h2>

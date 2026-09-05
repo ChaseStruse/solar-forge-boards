@@ -1,6 +1,11 @@
 """Work-item API and activity behavior."""
 
+from unittest.mock import Mock
+
+import pytest
 from flask.testing import FlaskClient
+
+from backend.app.repositories import idempotency as idempotency_repository
 
 
 def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> None:
@@ -345,3 +350,131 @@ def test_activity_includes_project_and_work_item_creation(
     events = client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
     event_types: set[str] = {event["event_type"] for event in events}
     assert event_types == {"project.created", "work_item.created"}
+
+
+def test_reference_numbers_survive_deletion(client: FlaskClient, project_id: str) -> None:
+    """A deleted story reference must never point to a later story."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    first = client.post(collection, json={"title": "Original"}).get_json()["data"]
+    client.delete(f"/api/v1/work-items/{first['id']}")
+    second = client.post(collection, json={"title": "Replacement"}).get_json()["data"]
+    assert second["reference_number"] > first["reference_number"]
+    assert (
+        client.get(f"/api/v1/work-items/by-reference/{first['reference_number']}").status_code
+        == 404
+    )
+
+
+@pytest.mark.parametrize("operation", ["update", "transitions", "priority"])
+def test_stale_noop_story_write_is_rejected(
+    client: FlaskClient, work_item_id: str, operation: str
+) -> None:
+    """No-op commands still enforce an agent's supplied revision."""
+    path = f"/api/v1/work-items/{work_item_id}"
+    client.patch(path, json={"title": "Current"})
+    headers = {"If-Match": '"1"'}
+    if operation == "update":
+        response = client.patch(path, json={"title": "Current"}, headers=headers)
+    else:
+        payload = {"status": "todo"} if operation == "transitions" else {"direction": "up"}
+        response = client.post(f"{path}/{operation}", json=payload, headers=headers)
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "version_conflict"
+
+
+def test_idempotent_response_failure_rolls_back_everything(
+    client: FlaskClient, project_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed response record cannot leave either a story or a stuck reservation."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    headers = {"Idempotency-Key": "response-failure"}
+    with monkeypatch.context() as scoped:
+        scoped.setattr(idempotency_repository, "complete_request", Mock(side_effect=RuntimeError))
+        with pytest.raises(RuntimeError):
+            client.post(collection, json={"title": "Retry"}, headers=headers)
+    assert client.get(collection).get_json()["data"] == []
+    events = client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
+    assert [event["event_type"] for event in events] == ["project.created"]
+    first = client.post(collection, json={"title": "Retry"}, headers=headers)
+    replay = client.post(collection, json={"title": "Retry"}, headers=headers)
+    assert first.status_code == replay.status_code == 201
+    assert first.get_json() == replay.get_json()
+    assert len(client.get(collection).get_json()["data"]) == 1
+
+
+@pytest.mark.parametrize("sort", ["priority", "created_at", "updated_at", "title", "status"])
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_paginated_tag_filter_matches_complete_collection(
+    client: FlaskClient, project_id: str, sort: str, direction: str
+) -> None:
+    """SQL pagination preserves OR tags, ties, ordering, and complete embedded tags."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    tags = client.get(f"/api/v1/projects/{project_id}/tags").get_json()["data"]
+    selected = [tag["id"] for tag in tags[:2]]
+    for index in range(6):
+        client.post(
+            collection,
+            json={
+                "title": f"Match {index // 2}",
+                "tag_ids": selected if index < 4 else [selected[0]],
+            },
+        )
+    client.post(collection, json={"title": "Match excluded"})
+    query = [("tag_id", tag_id) for tag_id in selected]
+    query += [
+        ("tag_id", selected[0]),
+        ("search", "Match"),
+        ("sort", sort),
+        ("direction", direction),
+    ]
+    expected = client.get(collection, query_string=query).get_json()["data"]
+    collected = []
+    cursor = None
+    for _ in range(6):
+        page_query = [*query, ("limit", "2")]
+        if cursor is not None:
+            page_query.append(("cursor", cursor))
+        response = client.get(collection, query_string=page_query)
+        assert response.status_code == 200
+        page = response.get_json()
+        collected.extend(page["data"])
+        cursor = page["meta"]["next_cursor"]
+        if cursor is None:
+            break
+    assert cursor is None
+    assert len(expected) == 6
+    assert collected == expected
+
+
+def test_deleted_cursor_anchor_is_rejected(client: FlaskClient, project_id: str) -> None:
+    """A cursor whose last story no longer exists retains the documented error."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    for title in ["First", "Second"]:
+        client.post(collection, json={"title": title})
+    page = client.get(collection, query_string={"limit": 1}).get_json()
+    client.delete(f"/api/v1/work-items/{page['data'][0]['id']}")
+    response = client.get(
+        collection, query_string={"limit": 1, "cursor": page["meta"]["next_cursor"]}
+    )
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "invalid_cursor"
+
+
+def test_create_and_update_share_normalization(client: FlaskClient, project_id: str) -> None:
+    """Creation and partial updates apply identical shared field rules."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    tag = client.get(f"/api/v1/projects/{project_id}/tags").get_json()["data"][0]["id"]
+    payload = {
+        "title": "  Normalized  ",
+        "repository_url": " https://example.com/repo ",
+        "acceptance_criteria": ["  Criterion  "],
+        "tag_ids": [tag, tag],
+    }
+    first = client.post(collection, json=payload).get_json()["data"]
+    second = client.post(collection, json={"title": "Other"}).get_json()["data"]
+    updated = client.patch(f"/api/v1/work-items/{second['id']}", json=payload).get_json()["data"]
+    for field in ["title", "repository_url", "acceptance_criteria", "tags"]:
+        assert first[field] == updated[field]
+    assert first["title"] == "Normalized"
+    assert first["acceptance_criteria"] == ["Criterion"]
+    assert len(first["tags"]) == 1
