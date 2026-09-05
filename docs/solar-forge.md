@@ -77,11 +77,34 @@ deletions can require a human approval token without changing the public resourc
 The current activity endpoint returns only the 50 newest events and has no cursor. Add pagination or
 a durable event cursor before relying on it for complete synchronization.
 
-## Future event delivery
+## Durable event delivery
 
-The current activity table is an audit source, not yet a message bus. A transactional outbox can
-later publish selected events to Solar-Forge or a queue. The event should be written in the same
-transaction as the domain change, then delivered asynchronously with retries and deduplication.
+New activity is captured atomically in an outbox. Run the optional dispatcher to push events to one
+configured Solar Forge endpoint or HTTP queue gateway. Consumers no longer need to poll the activity
+API for new changes. The database wakes the worker with PostgreSQL LISTEN/NOTIFY; a five-second
+recovery scan handles retries, lost notifications, and expired claims. Durable rows are the source
+of truth, not notifications.
+
+The receiver should authenticate the optional bearer token, validate `schema_version`, and use the
+payload `id` / `Idempotency-Key` as a durable deduplication key. In one receiver-owned transaction:
+
+1. Insert the event ID into an inbox table with a unique key.
+2. If it already exists, return a successful acknowledgement without repeating effects.
+3. Otherwise apply the event's effects (or durably enqueue it) and commit together with the inbox ID.
+4. Return HTTP 2xx only after that commit.
+
+Do not mark an inbox event processed before committing its effects. If effects occur in another
+system, that system also needs an idempotency key or another transactional outbox. Retain inbox IDs
+for as long as old deliveries can be manually retried. The sender retries the same immutable ID and
+payload, but cannot enforce deduplication inside a remote receiver. Tests exercise a lost-acknowledgement
+retry against a local receiver and verify one logical effect.
+
+`OUTBOX_EVENT_TYPES` selects exact comma-separated event types; blank delivers all. Nonselected rows
+remain pending for future selection. There is one logical receiver per installation; all worker
+replicas must share the same endpoint and event selection. Changing the endpoint redirects pending
+work to the new receiver; already delivered events are not replayed automatically. Per-receiver
+subscriptions, a receiver implementation in Solar Forge, and inbox retention policy remain the
+responsibility of the receiving integration.
 
 ## Python agent tools
 

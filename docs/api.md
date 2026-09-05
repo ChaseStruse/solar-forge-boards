@@ -242,8 +242,8 @@ Returns at most 50 events, newest first. Each event contains `id`, `project_id`,
 - `work_item.deleted`
 - `tag.created`
 
-Activity is append-only through the public application behavior. There is no pagination or event
-delivery endpoint yet.
+Activity is append-only through the public application behavior. Activity pagination is not yet
+available. New activity is also captured by the transactional outbox described below.
 
 ## Health
 
@@ -306,3 +306,38 @@ failures preserve available repository stats. Unknown projects return 404 before
 Requests go only to GitHub's API, with no redirects, a five-second socket timeout, a two-megabyte
 response bound, and up to four concurrent repositories. Successful and failed snapshots are cached
 for 60 seconds per process (up to 128 entries). Board and activity views do not fetch GitHub stats.
+
+
+## Event delivery outbox
+
+Every new activity event creates one outbox record in the same transaction as its domain write.
+API retries, no-op commands, and failed writes do not create extra events. The immutable payload
+has `schema_version: 1` plus the activity fields (`id`, `project_id`, `work_item_id`, `event_type`,
+`details`, `created_at`). Its ID is the activity event UUID. Story deletion leaves previously
+captured payloads intact, including their original story IDs; payloads are historical facts.
+Existing activity from before the outbox migration is not backfilled.
+
+- `GET /api/v1/projects/{project_id}/outbox`: newest 50 records by default; optional `status`
+  (`pending`, `processing`, `delivered`, `failed`) and `limit` (1–100). No cursor pagination yet.
+- `GET /api/v1/outbox/{event_id}`: one delivery record, or 404.
+- `POST /api/v1/outbox/{event_id}/retry`: empty JSON object; grant a failed record eight more
+  attempts. Supports `Idempotency-Key`; other states return `409 outbox_not_failed`.
+
+Records expose `id`, `project_id`, `event_type`, `payload`, `status`, lifetime `attempts`,
+`attempt_limit`, `next_attempt_at`, `lease_until`, `last_error`, `delivered_at`, and `created_at`.
+Internal worker lease tokens are not exposed. Errors are sanitized and never include response
+bodies, endpoint credentials, or bearer tokens. Retry preserves the payload, ID, attempt count,
+and last error (cleared after successful delivery). It can recover events from archived projects
+and does not create another domain activity event or recursively enqueue itself.
+
+Delivery is disabled until an operator configures and starts the separate worker. The web process
+never sends queued events. A receiver acknowledges with HTTP 2xx. Retries use the identical payload,
+`Idempotency-Key`, and `X-Solar-Forge-Event-ID`; both ID headers equal the event UUID. When present,
+the original `details.correlation_id` is forwarded as `X-Correlation-ID`. An optional bearer token
+identifies the sending installation to its receiver.
+
+Delivery is **at least once**, not exactly once. Receivers must atomically deduplicate the event ID
+with their side effects and return 2xx for an already processed event. A timeout or worker crash can
+occur after the receiver commits but before the sender records success. A 409 response is treated
+as failure, not as acknowledgement. Ordering is not guaranteed across retries or workers. See the
+integration and development guides for receiver requirements and worker configuration.

@@ -11,12 +11,14 @@ from werkzeug.exceptions import HTTPException
 from backend.app.api.correlation import register_correlation
 from backend.app.api.health import health_blueprint
 from backend.app.api.openapi import openapi_blueprint
+from backend.app.api.outbox import outbox_blueprint
 from backend.app.api.projects import projects_blueprint
 from backend.app.api.work_items import work_items_blueprint
 from backend.app.config import Settings, load_settings
 from backend.app.database import create_database_engine
 from backend.app.errors import AppError
 from backend.app.integrations.github import GitHubClient
+from backend.app.outbox_worker import register_outbox_command
 from backend.app.ui.routes import ui_blueprint
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
@@ -33,6 +35,9 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         SECRET_KEY=settings.secret_key,
         JSON_SORT_KEYS=False,
         GITHUB_TOKEN=settings.github_token,
+        OUTBOX_URL=settings.outbox_url,
+        OUTBOX_TOKEN=settings.outbox_token,
+        OUTBOX_EVENT_TYPES=settings.outbox_event_types,
     )
     if test_config is not None:
         app.config.update(test_config)
@@ -41,6 +46,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.extensions["database_engine"] = engine
     app.extensions["github_client"] = GitHubClient(str(app.config["GITHUB_TOKEN"]))
 
+    app.register_blueprint(outbox_blueprint)
+    register_outbox_command(app)
     app.register_blueprint(health_blueprint)
     app.register_blueprint(openapi_blueprint)
     app.register_blueprint(projects_blueprint)

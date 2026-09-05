@@ -7,8 +7,9 @@ from time import monotonic
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import Request, build_opener
 
+from backend.app.integrations.http import NoRedirects
 from backend.app.schemas.github import GitHubRelease, GitHubRepository
 
 
@@ -18,15 +19,6 @@ class GitHubFailure(Exception):
     def __init__(self, message: str, *, status: int | None = None) -> None:
         super().__init__(message)
         self.status = status
-
-
-class NoRedirects(HTTPRedirectHandler):
-    """Keep credentials on the configured GitHub API origin."""
-
-    def redirect_request(
-        self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str
-    ) -> None:
-        return None
 
 
 class GitHubClient:

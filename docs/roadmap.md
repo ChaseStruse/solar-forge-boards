@@ -30,7 +30,7 @@ Add contract tests that exercise the same examples used in Solar Forge tooling.
 
 - Provide narrowly scoped tools for project context, tag lookup, story planning, and status updates.
 - Add correlation IDs so an agent plan, API request, and activity event can be traced together.
-- Build a transactional outbox for reliable event delivery instead of polling activity forever.
+- Connect the implemented transactional outbox to a receiver with durable inbox deduplication.
 - Define tag taxonomy guidance and specialist routing conventions with the Solar Forge brain.
 - Add human confirmation around deletion and tag-vocabulary changes when agent write tools are
   introduced.

@@ -45,5 +45,21 @@ services:
       - ./backend:/app/backend:ro
       - ./frontend:/app/frontend:ro
 
+  outbox:
+    profiles: ["outbox"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["flask", "--app", "backend.app.wsgi:app", "deliver-outbox"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://solar_forge_boards:solar_forge_boards@db:5432/solar_forge_boards
+      OUTBOX_URL: ${OUTBOX_URL:-}
+      OUTBOX_TOKEN: ${OUTBOX_TOKEN:-}
+      OUTBOX_EVENT_TYPES: ${OUTBOX_EVENT_TYPES:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   solar-forge-boards-data:

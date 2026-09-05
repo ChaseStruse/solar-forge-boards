@@ -17,6 +17,7 @@ transitions, project-scoped tags, and an immutable activity trail.
 - Edit project details or archive a project into reversible, read-only history.
 - Switch between board presets or show and hide individual lanes. Saved lane visibility is local to
   the browser and project.
+- Capture activity in a transactional outbox with optional HTTP delivery, retries, and recovery.
 - Link boards to GitHub repositories and view stats, latest releases, and release notes.
 - Connect model hosts through scoped Python agent tools with host approval and correlation tracing.
 - Use the same backend rules through the human-facing UI or the `/api/v1` JSON API.
@@ -97,7 +98,7 @@ docs/                        User, API, architecture, development, and agent-int
 ## Current boundaries
 
 Authentication, authorization, multi-tenancy, assignments, comments, activity pagination, tag editing or
-deletion, permanent project deletion, and webhooks are not implemented. Story collection cursor pagination is
+deletion, permanent project deletion, and per-project webhook subscriptions are not implemented. Story collection cursor pagination is
 available for API clients. Do not expose the current application
 to untrusted networks. The service and repository boundaries are designed so these capabilities can
 be added without coupling API clients to the HTML interface.

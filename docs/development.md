@@ -156,3 +156,72 @@ The integration reads [repository metadata](https://docs.github.com/en/rest/repo
 and [the latest release](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)
 using GitHub REST API version `2026-03-10`. There is no GitHub write access, OAuth flow, webhook,
 or per-user token storage in this local integration.
+
+## Outbox delivery worker
+
+Migration `4e8837ce388a` adds only the outbox table and indexes. Apply it before starting updated
+application code. Existing projects, stories, and activity remain intact; historical activity is not
+backfilled. Downgrading drops delivery state and queued payloads, so drain or export them before an
+intentional rollback. It does not remove project, story, or activity rows.
+
+Delivery is disabled by default. New events accumulate durably even while the worker is stopped.
+Configure the ignored `.env` for Compose (or export variables for local Flask):
+
+```dotenv
+OUTBOX_URL=https://your-solar-forge-host.example/events
+OUTBOX_TOKEN=
+OUTBOX_EVENT_TYPES=work_item.created,work_item.updated,work_item.status_changed
+```
+
+`OUTBOX_URL` must use HTTPS; HTTP is allowed for loopback-only local tests. Embedded credentials,
+query strings and fragments are rejected. The token, when supplied, is sent as a bearer credential.
+Blank `OUTBOX_EVENT_TYPES` selects all events; otherwise use exact comma-separated event types.
+Unselected events remain pending. All replicas must use the same configuration and one logical
+receiver. Do not activate a new receiver without considering the existing pending backlog.
+
+Build/apply the migration and start the opt-in worker:
+
+```bash
+docker compose up --build migrate
+docker compose --profile outbox up -d --build outbox
+```
+
+The outbox profile is not started by ordinary `docker compose up`. The worker exposes no ports.
+After changing its environment, recreate it. Stop sending with `docker compose stop outbox`;
+queued events and recovery state remain in PostgreSQL. Locally, run:
+
+```bash
+uv run flask --app backend.app.wsgi:app deliver-outbox
+```
+
+Add `--once` to process at most 100 currently due records and exit. No configured endpoint makes
+the command fail without attempting delivery. SQLite tests use one-shot mode only. Continuous
+PostgreSQL mode listens for commit notifications and checks recovery work every five seconds. It
+reconnects after infrastructure errors. Each HTTP attempt has a ten-second socket timeout and follows
+no redirects. Only a 2xx response acknowledges delivery; response bodies are not stored or logged.
+
+Inspect failures using `GET /api/v1/projects/{project_id}/outbox?status=failed`; inspect a known event
+at `GET /api/v1/outbox/{event_id}`. After fixing the receiver, POST `{}` to
+`/api/v1/outbox/{event_id}/retry` with a new `Idempotency-Key`. The worker will pick it up when next
+running. Statuses are pending, processing, delivered, and failed. Attempts are lifetime counts;
+`attempt_limit` increases on explicit recovery. A 60-second expired lease is reclaimable, while
+exhausted leases become failed. Delivered rows are retained for inspection; there is no automated
+retention cleanup in this version. Plan storage retention before operating at high event volume.
+
+Receivers **must** deduplicate event IDs atomically with their effects. The delivery contract is
+at least once and unordered; bearer authentication alone does not prevent replay. See the Solar Forge
+guide for the receiver transaction pattern. The worker uses PostgreSQL's
+[commit notification support via Psycopg](https://www.psycopg.org/psycopg3/docs/advanced/async.html#asynchronous-notifications)
+for prompt wakeups; the durable queue and recovery scans handle missed notifications.
+
+The regular tests use temporary SQLite files and local HTTP test receivers. To also run migration,
+`SKIP LOCKED`, and commit-notification checks, supply an **empty, disposable PostgreSQL database**
+whose name starts with `solar_forge_outbox_test_`:
+
+```bash
+OUTBOX_TEST_DATABASE_URL=postgresql+psycopg://user:password@localhost/solar_forge_outbox_test_run uv run pytest
+```
+
+This optional test upgrades through the migration chain, checks preserved rows and transaction
+notifications, exercises two simultaneous claims, then downgrades/re-upgrades the outbox migration.
+It refuses other database names and nonempty databases. Never point it at the board database.
