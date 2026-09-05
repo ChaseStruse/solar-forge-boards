@@ -12,6 +12,9 @@ class Settings(BaseModel):
 
     database_url: str
     github_token: str = ""
+    outbox_url: str = ""
+    outbox_token: str = ""
+    outbox_event_types: str = ""
     secret_key: str
 
 
@@ -22,6 +25,9 @@ def load_settings() -> Settings:
             "DATABASE_URL",
             "postgresql+psycopg://solar_forge_boards:solar_forge_boards@localhost:5432/solar_forge_boards",
         ),
+        outbox_url=os.getenv("OUTBOX_URL", ""),
+        outbox_token=os.getenv("OUTBOX_TOKEN", ""),
+        outbox_event_types=os.getenv("OUTBOX_EVENT_TYPES", ""),
         github_token=os.getenv("GITHUB_TOKEN", ""),
         secret_key=os.getenv("FLASK_SECRET_KEY", "development-only-secret"),
     )

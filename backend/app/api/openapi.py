@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from backend.app.schemas.common import ActivityEventRead
 from backend.app.schemas.github import GitHubRepository
+from backend.app.schemas.outbox import OutboxRead
 from backend.app.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from backend.app.schemas.tags import TagCreate, TagRead
 from backend.app.schemas.work_items import (
@@ -168,6 +169,7 @@ def openapi_document() -> dict[str, Any]:
     """Generate the OpenAPI 3.1 document from the public command and read schemas."""
     schemas: tuple[type[BaseModel], ...] = (
         ActivityEventRead,
+        OutboxRead,
         GitHubRepository,
         PriorityMove,
         ProjectCreate,
@@ -190,6 +192,45 @@ def openapi_document() -> dict[str, Any]:
             "description": "The versioned JSON contract for Solar Forge Boards clients and agents.",
         },
         "paths": {
+            "/api/v1/projects/{project_id}/outbox": {
+                "parameters": [
+                    project_id,
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["pending", "processing", "delivered", "failed"],
+                        },
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+                    },
+                ],
+                "get": {
+                    "responses": data_collection_response(OutboxRead, "Recent delivery states")
+                },
+            },
+            "/api/v1/outbox/{event_id}": {
+                "parameters": [uuid_parameter("event_id")],
+                "get": {"responses": data_response(OutboxRead, "200", "Delivery state")},
+            },
+            "/api/v1/outbox/{event_id}/retry": {
+                "parameters": [uuid_parameter("event_id")],
+                "post": {
+                    "parameters": write_safety_parameters(conditional=False),
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "object", "additionalProperties": False}
+                            }
+                        }
+                    },
+                    "responses": data_response(OutboxRead, "200", "Failed event requeued"),
+                },
+            },
             "/api/v1/projects": {
                 "get": {"responses": data_collection_response(ProjectRead, "Projects")},
                 "post": {

@@ -116,3 +116,11 @@ the project list changes. Archived boards can view repository stats but cannot e
 
 Public repositories work without a token. For private repositories or higher API limits, configure
 `GITHUB_TOKEN` as described in the development guide. GitHub Enterprise hosts are not supported yet.
+
+
+## Integration delivery
+
+New activity is also saved for optional delivery to Solar Forge. This does not change how you use
+the board. Delivery is disabled until the installation's worker is configured. Operators can inspect
+pending or failed deliveries and retry a failed event using the outbox API described in the API guide.
+Existing projects and stories are preserved; activity from before this feature is not sent retroactively.

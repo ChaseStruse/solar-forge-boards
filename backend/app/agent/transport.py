@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import Request, build_opener
+
+from backend.app.integrations.http import NoRedirects
 
 
 @dataclass(frozen=True)
@@ -23,15 +25,6 @@ class Transport(Protocol):
     def request(
         self, method: str, path: str, payload: dict[str, Any] | None, headers: dict[str, str]
     ) -> ApiResponse: ...
-
-
-class NoRedirects(HTTPRedirectHandler):
-    """Never forward approved commands to another endpoint or host."""
-
-    def redirect_request(
-        self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str
-    ) -> None:
-        return None
 
 
 class HttpTransport:

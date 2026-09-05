@@ -210,3 +210,51 @@ class IdempotencyRequestRow(TypedDict):
     response_status: int | None
     response_data: dict[str, Any] | None
     created_at: datetime
+
+
+outbox_events: Table = Table(
+    "outbox_events",
+    metadata,
+    Column("id", Uuid(as_uuid=True), primary_key=True),
+    Column(
+        "project_id",
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("event_type", String(64), nullable=False),
+    Column("payload", JSON, nullable=False),
+    Column("status", String(16), nullable=False, server_default="pending"),
+    Column("attempts", Integer, nullable=False, server_default="0"),
+    Column("attempt_limit", Integer, nullable=False, server_default="8"),
+    Column("next_attempt_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("lease_token", Uuid(as_uuid=True), nullable=True),
+    Column("lease_until", DateTime(timezone=True), nullable=True),
+    Column("last_error", String(255), nullable=True),
+    Column("delivered_at", DateTime(timezone=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint(
+        "status IN ('pending', 'processing', 'delivered', 'failed')", name="ck_outbox_status"
+    ),
+    CheckConstraint("attempts >= 0 AND attempt_limit > 0", name="ck_outbox_attempts"),
+)
+Index("ix_outbox_due", outbox_events.c.status, outbox_events.c.next_attempt_at)
+Index("ix_outbox_project_created", outbox_events.c.project_id, outbox_events.c.created_at)
+
+
+class OutboxRow(TypedDict):
+    """One immutable event payload and its recoverable delivery state."""
+
+    id: UUID
+    project_id: UUID
+    event_type: str
+    payload: dict[str, Any]
+    status: str
+    attempts: int
+    attempt_limit: int
+    next_attempt_at: datetime
+    lease_token: UUID | None
+    lease_until: datetime | None
+    last_error: str | None
+    delivered_at: datetime | None
+    created_at: datetime

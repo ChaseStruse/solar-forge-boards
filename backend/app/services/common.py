@@ -10,6 +10,8 @@ from backend.app.correlation import correlation_id
 from backend.app.errors import AppError, version_conflict
 from backend.app.models import ActivityRow, ProjectRow
 from backend.app.repositories import activity as activity_repository
+from backend.app.repositories import outbox as outbox_repository
+from backend.app.schemas.common import ActivityEventRead
 
 
 @contextmanager
@@ -39,4 +41,18 @@ def record_activity(connection: Connection, values: dict[str, Any]) -> ActivityR
     trace = correlation_id.get()
     if trace is not None:
         values = {**values, "details": {**values["details"], "correlation_id": trace}}
-    return activity_repository.create_activity_event(connection, values)
+    event = activity_repository.create_activity_event(connection, values)
+    outbox_repository.enqueue(
+        connection,
+        {
+            "id": event["id"],
+            "project_id": event["project_id"],
+            "event_type": event["event_type"],
+            "payload": {
+                "schema_version": 1,
+                **ActivityEventRead.model_validate(event).model_dump(mode="json"),
+            },
+            "created_at": event["created_at"],
+        },
+    )
+    return event

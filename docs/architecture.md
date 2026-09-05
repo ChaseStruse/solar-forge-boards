@@ -82,7 +82,7 @@ at the end of the destination lane, avoiding ambiguous cross-lane priority compa
 Activity events are append-only application facts. A service records a meaningful write and its
 event in the same database transaction. Deleting a story preserves its earlier events and adds a
 deletion event containing the former ID, title, and status. Activity currently supports audit
-history and provides the seam for later notifications, webhooks, analytics, and agent context.
+history and feeds durable outbox delivery for downstream integrations.
 
 Projects can be archived without deleting their stories, tags, or activity. Archived projects are
 readable history, while service-layer checks reject writes consistently for API and HTMX clients.
@@ -155,3 +155,29 @@ is held during GitHub requests. The GitHub client holds a server-only environmen
 response sizes, timeouts and concurrency, sanitizes failures, and caches snapshots briefly. Templates
 receive typed snapshots and escape release notes as plain text. This is a single trusted local
 installation; future hosted credentials and authorization remain a separate design task.
+
+
+## Transactional outbox
+
+The shared `record_activity` service helper writes the activity event and immutable outbox payload
+using the caller's connection. The activity UUID is the outbox primary key, preventing duplicate
+capture. A failed enqueue rolls back the domain change and activity, including any idempotency
+reservation. No-op commands and response replays bypass capture. Outbox payloads deliberately have
+no live story foreign key, so later deletion cannot erase or rewrite an undelivered historical event.
+
+The dispatcher claims one due event in a short transaction with PostgreSQL `FOR UPDATE SKIP LOCKED`,
+then performs HTTP outside the transaction. A 60-second lease recovers dead workers. A unique claim
+token fences late acknowledgements after another worker reclaims the event. The event's identity
+remains stable across those attempts. Transient duplication after a crash is handled by the receiver's
+transactional inbox, as described in the Solar Forge guide; no exactly-once network guarantee is made.
+
+Eight unsuccessful attempts enter a visible failed state. Delays begin at five seconds and double
+with a one-hour cap. Expired final-attempt leases also become failed. Manual retry grants eight
+additional attempts without resetting lifetime counters or changing payloads. Delivery state is
+independent of project archive status. The worker has an optional type filter and one installation-wide
+HTTP receiver, with no network delivery until explicitly configured and started.
+
+PostgreSQL commit notifications contain no payload. The worker listens before scanning and uses
+five-second recovery scans so notifications cannot become a durability dependency. SQLite supports
+isolated one-shot dispatch tests; continuous dispatch requires PostgreSQL. API diagnostics and recovery
+call the same outbox services as the worker's delivery flow.
