@@ -71,3 +71,27 @@ def test_project_can_be_edited_archived_and_restored(client: FlaskClient, projec
         for event in client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
     }
     assert {"project.updated", "project.archived", "project.restored"} <= event_types
+
+
+def test_project_conditional_write_rejects_a_stale_etag(
+    client: FlaskClient, project_id: str
+) -> None:
+    """Agents can avoid overwriting a project revision they did not read."""
+    fetched = client.get(f"/api/v1/projects/{project_id}")
+    assert fetched.headers["ETag"] == '"1"'
+
+    first = client.patch(
+        f"/api/v1/projects/{project_id}",
+        headers={"If-Match": fetched.headers["ETag"]},
+        json={"description": "First editor wins."},
+    )
+    assert first.status_code == 200
+    assert first.headers["ETag"] == '"2"'
+
+    stale = client.patch(
+        f"/api/v1/projects/{project_id}",
+        headers={"If-Match": fetched.headers["ETag"]},
+        json={"description": "Old editor must not overwrite."},
+    )
+    assert stale.status_code == 409
+    assert stale.get_json()["error"]["code"] == "version_conflict"

@@ -64,9 +64,11 @@ context easier to route to the appropriate Solar Forge brain or specialist.
 ## Before production agent writes
 
 Add authentication, tenant scoping, service-account identities, and service-layer authorization.
-Extend activity events with `actor_id`, an idempotency key, and an optional correlation ID. Write
-operations should accept idempotency keys so retries cannot create duplicate projects, work items,
-tags, or transitions.
+Extend activity events with `actor_id` and an optional correlation ID. Public JSON writes already
+accept an `Idempotency-Key`: retain the same key when retrying one intended action, and generate a
+new key for a new action. Projects and stories return an ETag; send it as `If-Match` for updates,
+transitions, priority moves, archive, and restore actions so a stale agent does not overwrite newer
+work.
 
 For autonomous actions, use policy scopes such as `projects:read`, `tags:read`, `tags:write`,
 `work_items:write`, `work_items:transition`, and `work_items:delete`. High-impact transitions and

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
-from backend.app.errors import AppError, not_found
+from backend.app.errors import AppError, not_found, version_conflict
 from backend.app.models import ActivityRow, ProjectRow
 from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
@@ -63,7 +63,13 @@ def get_project(engine: Engine, project_id: UUID, *, html: bool = False) -> Proj
     return project
 
 
-def update_project(engine: Engine, project_id: UUID, command: ProjectUpdate) -> ProjectRow:
+def update_project(
+    engine: Engine,
+    project_id: UUID,
+    command: ProjectUpdate,
+    *,
+    expected_version: int | None = None,
+) -> ProjectRow:
     """Update project details and retain an auditable record of meaningful changes."""
     try:
         with engine.begin() as connection:
@@ -82,10 +88,13 @@ def update_project(engine: Engine, project_id: UUID, command: ProjectUpdate) -> 
             if not changes:
                 return existing
             changes["updated_at"] = datetime.now(UTC)
+            changes["version"] = existing["version"] + 1
             updated: ProjectRow | None = project_repository.update_project(
-                connection, project_id, changes
+                connection, project_id, changes, expected_version=expected_version
             )
             if updated is None:
+                if expected_version is not None:
+                    raise version_conflict()
                 raise not_found("Project", str(project_id))
             activity_repository.create_activity_event(
                 connection,
@@ -106,17 +115,31 @@ def update_project(engine: Engine, project_id: UUID, command: ProjectUpdate) -> 
         ) from error
 
 
-def archive_project(engine: Engine, project_id: UUID) -> ProjectRow:
+def archive_project(
+    engine: Engine, project_id: UUID, *, expected_version: int | None = None
+) -> ProjectRow:
     """Archive a project, preserving all of its data as read-only history."""
-    return set_project_archived(engine, project_id, archived=True)
+    return set_project_archived(
+        engine, project_id, archived=True, expected_version=expected_version
+    )
 
 
-def restore_project(engine: Engine, project_id: UUID) -> ProjectRow:
+def restore_project(
+    engine: Engine, project_id: UUID, *, expected_version: int | None = None
+) -> ProjectRow:
     """Restore an archived project to active planning."""
-    return set_project_archived(engine, project_id, archived=False)
+    return set_project_archived(
+        engine, project_id, archived=False, expected_version=expected_version
+    )
 
 
-def set_project_archived(engine: Engine, project_id: UUID, *, archived: bool) -> ProjectRow:
+def set_project_archived(
+    engine: Engine,
+    project_id: UUID,
+    *,
+    archived: bool,
+    expected_version: int | None = None,
+) -> ProjectRow:
     """Set the reversible project archive state and emit an activity event when it changes."""
     with engine.begin() as connection:
         existing: ProjectRow | None = project_repository.get_project(connection, project_id)
@@ -129,9 +152,16 @@ def set_project_archived(engine: Engine, project_id: UUID, *, archived: bool) ->
         updated: ProjectRow | None = project_repository.update_project(
             connection,
             project_id,
-            {"archived_at": archived_at, "updated_at": datetime.now(UTC)},
+            {
+                "archived_at": archived_at,
+                "updated_at": datetime.now(UTC),
+                "version": existing["version"] + 1,
+            },
+            expected_version=expected_version,
         )
         if updated is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Project", str(project_id))
         activity_repository.create_activity_event(
             connection,

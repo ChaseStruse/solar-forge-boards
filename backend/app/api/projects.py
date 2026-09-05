@@ -4,7 +4,8 @@ from uuid import UUID
 
 from flask import Blueprint, Response, request
 
-from backend.app.api.utils import json_model, json_models, parse_json
+from backend.app.api.idempotency import execute_idempotent
+from backend.app.api.utils import json_model, json_models, parse_if_match, parse_json
 from backend.app.database import get_engine
 from backend.app.models import ActivityRow, ProjectRow, TagRow, WorkItemWithTagsRow
 from backend.app.schemas.common import ActivityEventRead
@@ -22,8 +23,18 @@ projects_blueprint: Blueprint = Blueprint("api_projects", __name__, url_prefix="
 def create_project() -> tuple[Response, int]:
     """Create a project."""
     command: ProjectCreate = parse_json(ProjectCreate)
-    project: ProjectRow = project_service.create_project(get_engine(), command)
-    return json_model(ProjectRead.model_validate(project), status=201)
+    project, status = execute_idempotent(
+        get_engine(),
+        scope="POST:/api/v1/projects",
+        command=command,
+        expected_version=None,
+        model_type=ProjectRead,
+        status=201,
+        operation=lambda: ProjectRead.model_validate(
+            project_service.create_project(get_engine(), command)
+        ),
+    )
+    return json_model(project, status=status, etag=project.version)
 
 
 @projects_blueprint.get("/projects")
@@ -37,37 +48,86 @@ def list_projects() -> Response:
 def get_project(project_id: UUID) -> tuple[Response, int]:
     """Get a project."""
     project: ProjectRow = project_service.get_project(get_engine(), project_id)
-    return json_model(ProjectRead.model_validate(project))
+    return json_model(ProjectRead.model_validate(project), etag=project["version"])
 
 
 @projects_blueprint.patch("/projects/<uuid:project_id>")
 def update_project(project_id: UUID) -> tuple[Response, int]:
     """Edit an active project's name or description."""
     command: ProjectUpdate = parse_json(ProjectUpdate)
-    project: ProjectRow = project_service.update_project(get_engine(), project_id, command)
-    return json_model(ProjectRead.model_validate(project))
+    expected_version: int | None = parse_if_match()
+    project, status = execute_idempotent(
+        get_engine(),
+        scope=f"PATCH:/api/v1/projects/{project_id}",
+        command=command,
+        expected_version=expected_version,
+        model_type=ProjectRead,
+        status=200,
+        operation=lambda: ProjectRead.model_validate(
+            project_service.update_project(
+                get_engine(), project_id, command, expected_version=expected_version
+            )
+        ),
+    )
+    return json_model(project, status=status, etag=project.version)
 
 
 @projects_blueprint.post("/projects/<uuid:project_id>/archive")
 def archive_project(project_id: UUID) -> tuple[Response, int]:
     """Archive a project without deleting its history."""
-    project: ProjectRow = project_service.archive_project(get_engine(), project_id)
-    return json_model(ProjectRead.model_validate(project))
+    expected_version: int | None = parse_if_match()
+    project, status = execute_idempotent(
+        get_engine(),
+        scope=f"POST:/api/v1/projects/{project_id}/archive",
+        command=ProjectUpdate.model_construct(),
+        expected_version=expected_version,
+        model_type=ProjectRead,
+        status=200,
+        operation=lambda: ProjectRead.model_validate(
+            project_service.archive_project(
+                get_engine(), project_id, expected_version=expected_version
+            )
+        ),
+    )
+    return json_model(project, status=status, etag=project.version)
 
 
 @projects_blueprint.post("/projects/<uuid:project_id>/restore")
 def restore_project(project_id: UUID) -> tuple[Response, int]:
     """Restore an archived project."""
-    project: ProjectRow = project_service.restore_project(get_engine(), project_id)
-    return json_model(ProjectRead.model_validate(project))
+    expected_version: int | None = parse_if_match()
+    project, status = execute_idempotent(
+        get_engine(),
+        scope=f"POST:/api/v1/projects/{project_id}/restore",
+        command=ProjectUpdate.model_construct(),
+        expected_version=expected_version,
+        model_type=ProjectRead,
+        status=200,
+        operation=lambda: ProjectRead.model_validate(
+            project_service.restore_project(
+                get_engine(), project_id, expected_version=expected_version
+            )
+        ),
+    )
+    return json_model(project, status=status, etag=project.version)
 
 
 @projects_blueprint.post("/projects/<uuid:project_id>/tags")
 def create_project_tag(project_id: UUID) -> tuple[Response, int]:
     """Create a custom tag within a project."""
     command: TagCreate = parse_json(TagCreate)
-    tag: TagRow = tag_service.create_tag(get_engine(), project_id, command)
-    return json_model(TagRead.model_validate(tag), status=201)
+    tag, status = execute_idempotent(
+        get_engine(),
+        scope=f"POST:/api/v1/projects/{project_id}/tags",
+        command=command,
+        expected_version=None,
+        model_type=TagRead,
+        status=201,
+        operation=lambda: TagRead.model_validate(
+            tag_service.create_tag(get_engine(), project_id, command)
+        ),
+    )
+    return json_model(tag, status=status)
 
 
 @projects_blueprint.get("/projects/<uuid:project_id>/tags")
@@ -81,10 +141,18 @@ def list_project_tags(project_id: UUID) -> Response:
 def create_project_work_item(project_id: UUID) -> tuple[Response, int]:
     """Create a work item within a project."""
     command: WorkItemCreate = parse_json(WorkItemCreate)
-    item: WorkItemWithTagsRow = work_item_service.create_work_item(
-        get_engine(), project_id, command
+    item, status = execute_idempotent(
+        get_engine(),
+        scope=f"POST:/api/v1/projects/{project_id}/work-items",
+        command=command,
+        expected_version=None,
+        model_type=WorkItemRead,
+        status=201,
+        operation=lambda: WorkItemRead.model_validate(
+            work_item_service.create_work_item(get_engine(), project_id, command)
+        ),
     )
-    return json_model(WorkItemRead.model_validate(item), status=201)
+    return json_model(item, status=status, etag=item.version)
 
 
 @projects_blueprint.get("/projects/<uuid:project_id>/work-items")

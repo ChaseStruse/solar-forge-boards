@@ -34,6 +34,53 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
     assert by_reference.get_json()["data"] == item
 
 
+def test_idempotency_key_replays_story_creation_without_a_duplicate(
+    client: FlaskClient, project_id: str
+) -> None:
+    """A lost create response can be retried safely by an agent."""
+    headers = {"Idempotency-Key": "story-create-retry"}
+    payload = {"title": "Retry-safe story", "description": "Do not duplicate this work."}
+    first = client.post(f"/api/v1/projects/{project_id}/work-items", headers=headers, json=payload)
+    repeated = client.post(
+        f"/api/v1/projects/{project_id}/work-items", headers=headers, json=payload
+    )
+
+    assert first.status_code == repeated.status_code == 201
+    assert first.get_json() == repeated.get_json()
+    listed = client.get(f"/api/v1/projects/{project_id}/work-items").get_json()["data"]
+    assert [item["title"] for item in listed] == ["Retry-safe story"]
+
+    reused = client.post(
+        f"/api/v1/projects/{project_id}/work-items",
+        headers=headers,
+        json={"title": "Different request"},
+    )
+    assert reused.status_code == 409
+    assert reused.get_json()["error"]["code"] == "idempotency_key_reused"
+
+
+def test_story_conditional_write_rejects_a_stale_etag(
+    client: FlaskClient, work_item_id: str
+) -> None:
+    """A stale agent cannot overwrite a newer story edit."""
+    fetched = client.get(f"/api/v1/work-items/{work_item_id}")
+    first = client.patch(
+        f"/api/v1/work-items/{work_item_id}",
+        headers={"If-Match": fetched.headers["ETag"]},
+        json={"title": "Newer title"},
+    )
+    assert first.status_code == 200
+    assert first.headers["ETag"] == '"2"'
+
+    stale = client.patch(
+        f"/api/v1/work-items/{work_item_id}",
+        headers={"If-Match": fetched.headers["ETag"]},
+        json={"title": "Stale overwrite"},
+    )
+    assert stale.status_code == 409
+    assert stale.get_json()["error"]["code"] == "version_conflict"
+
+
 def test_work_item_acceptance_criteria_search_and_sort(
     client: FlaskClient, project_id: str
 ) -> None:

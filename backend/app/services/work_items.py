@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Connection, Engine
 
 from backend.app.domain import WorkItemStatus, can_transition
-from backend.app.errors import AppError, not_found
+from backend.app.errors import AppError, not_found, version_conflict
 from backend.app.models import ProjectRow, TagRow, WorkItemRow, WorkItemWithTagsRow
 from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
@@ -204,7 +204,11 @@ def delete_work_item(engine: Engine, work_item_id: UUID) -> UUID:
 
 
 def update_work_item(
-    engine: Engine, work_item_id: UUID, command: WorkItemUpdate
+    engine: Engine,
+    work_item_id: UUID,
+    command: WorkItemUpdate,
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
     """Update editable fields and record exactly what changed."""
     with engine.begin() as connection:
@@ -245,10 +249,13 @@ def update_work_item(
         if not changes and not tags_changed:
             return enrich_work_item(existing, existing_tags)
         changes["updated_at"] = datetime.now(UTC)
+        changes["version"] = existing["version"] + 1
         updated: WorkItemRow | None = work_item_repository.update_work_item(
-            connection, work_item_id, changes
+            connection, work_item_id, changes, expected_version=expected_version
         )
         if updated is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Work item", str(work_item_id))
         if tags_changed:
             tag_repository.replace_work_item_tags(
@@ -268,7 +275,11 @@ def update_work_item(
 
 
 def transition_work_item(
-    engine: Engine, work_item_id: UUID, command: StatusTransition
+    engine: Engine,
+    work_item_id: UUID,
+    command: StatusTransition,
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
     """Apply a valid lifecycle transition and record it."""
     with engine.begin() as connection:
@@ -296,9 +307,13 @@ def transition_work_item(
                     connection, existing["project_id"], target.value
                 ),
                 "updated_at": datetime.now(UTC),
+                "version": existing["version"] + 1,
             },
+            expected_version=expected_version,
         )
         if updated is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Work item", str(work_item_id))
         activity_repository.create_activity_event(
             connection,
@@ -314,7 +329,11 @@ def transition_work_item(
 
 
 def move_work_item_priority(
-    engine: Engine, work_item_id: UUID, command: PriorityMove
+    engine: Engine,
+    work_item_id: UUID,
+    command: PriorityMove,
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
     """Swap a story with its adjacent priority peer in the current workflow lane."""
     with engine.begin() as connection:
@@ -334,12 +353,27 @@ def move_work_item_priority(
         neighbor: WorkItemRow = lane_items[target_index]
         now: datetime = datetime.now(UTC)
         moved: WorkItemRow | None = work_item_repository.update_work_item(
-            connection, work_item_id, {"priority": neighbor["priority"], "updated_at": now}
+            connection,
+            work_item_id,
+            {
+                "priority": neighbor["priority"],
+                "updated_at": now,
+                "version": existing["version"] + 1,
+            },
+            expected_version=expected_version,
         )
         work_item_repository.update_work_item(
-            connection, neighbor["id"], {"priority": existing["priority"], "updated_at": now}
+            connection,
+            neighbor["id"],
+            {
+                "priority": existing["priority"],
+                "updated_at": now,
+                "version": neighbor["version"] + 1,
+            },
         )
         if moved is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Work item", str(work_item_id))
         activity_repository.create_activity_event(
             connection,

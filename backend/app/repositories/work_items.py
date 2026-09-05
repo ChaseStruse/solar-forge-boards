@@ -3,7 +3,19 @@
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Connection, Result, asc, delete, desc, func, insert, or_, select, update
+from sqlalchemy import (
+    Connection,
+    Result,
+    and_,
+    asc,
+    delete,
+    desc,
+    func,
+    insert,
+    or_,
+    select,
+    update,
+)
 
 from backend.app.models import WorkItemRow, work_items
 
@@ -103,14 +115,18 @@ def next_priority(connection: Connection, project_id: UUID, status: str) -> int:
 
 
 def update_work_item(
-    connection: Connection, work_item_id: UUID, values: dict[str, Any]
+    connection: Connection,
+    work_item_id: UUID,
+    values: dict[str, Any],
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemRow | None:
     """Update and return a work item."""
+    conditions: list[Any] = [work_items.c.id == work_item_id]
+    if expected_version is not None:
+        conditions.append(work_items.c.version == expected_version)
     result: Result[Any] = connection.execute(
-        update(work_items)
-        .where(work_items.c.id == work_item_id)
-        .values(**values)
-        .returning(work_items)
+        update(work_items).where(and_(*conditions)).values(**values).returning(work_items)
     )
     row: Any = result.mappings().one_or_none()
     return cast(WorkItemRow, dict(row)) if row is not None else None

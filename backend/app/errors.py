@@ -38,3 +38,12 @@ def not_found(resource: str, identifier: str, *, html: bool = False) -> AppError
         404,
         prefers_html=html,
     )
+
+
+def version_conflict() -> AppError:
+    """Build the public error used when a conditional write observes a newer revision."""
+    return AppError(
+        "version_conflict",
+        "The resource has changed since the version supplied by the client.",
+        409,
+    )

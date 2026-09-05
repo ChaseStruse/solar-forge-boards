@@ -87,6 +87,12 @@ readable history, while service-layer checks reject writes consistently for API 
 Acceptance criteria are an ordered JSON collection on a work item so their edits remain part of the
 same transactional story update and activity event.
 
+The public JSON API accepts persistent idempotency keys for creations and mutations. The API stores
+the original successful response and replays it for an identical retry, preventing an agent timeout
+from becoming a duplicate write. Projects and stories use monotonically increasing revisions; an
+agent can send the returned ETag in `If-Match` to reject a stale write before it overwrites a newer
+revision. The server-rendered UI remains compatible by omitting that optional API precondition.
+
 New projects receive their four default tags in the same transaction as project creation. Work-item
 responses embed their ordered tag objects so agent and UI clients do not need an N+1 lookup pattern.
 

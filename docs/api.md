@@ -18,6 +18,21 @@ the same Pydantic request and response schemas used by the public routes.
 Unknown request properties are rejected. The API currently has no authentication, authorization, or
 rate limiting and must not be exposed to untrusted networks.
 
+## Safe agent writes
+
+JSON creation endpoints, project updates and archiving, and story updates, transitions, and priority
+moves accept an optional `Idempotency-Key` header. Generate a new key for each intended write and
+retain it while retrying after a timeout or lost response. Repeating the same endpoint and payload
+with the same key returns the original successful response without running the write again. Reusing
+a key for a different request returns `409 idempotency_key_reused`.
+
+Projects and stories include an integer `version`. Their single-resource `GET` responses and write
+responses include a quoted `ETag`, such as `"3"`. Agent clients should send that value in
+`If-Match` for project updates/archive changes and story updates, transitions, and priority moves.
+If another writer has changed the resource first, the request returns `409 version_conflict` instead
+of overwriting newer data. The headers remain optional for compatibility with the browser UI and
+existing clients.
+
 ## Endpoint summary
 
 | Method | Path | Result |

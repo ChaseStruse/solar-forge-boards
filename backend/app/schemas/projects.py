@@ -31,6 +31,7 @@ class ProjectRead(ApiModel):
     name: str
     description: str
     archived_at: datetime | None
+    version: int
     created_at: datetime
     updated_at: datetime
 

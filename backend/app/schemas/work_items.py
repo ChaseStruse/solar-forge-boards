@@ -173,5 +173,6 @@ class WorkItemRead(ApiModel):
     tags: list[TagRead]
     status: WorkItemStatus
     priority: int
+    version: int
     created_at: datetime
     updated_at: datetime
