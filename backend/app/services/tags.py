@@ -6,11 +6,10 @@ from sqlalchemy import Connection, Engine
 
 from backend.app.errors import AppError, not_found
 from backend.app.models import ProjectRow, TagRow
-from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.repositories import tags as tag_repository
 from backend.app.schemas.tags import TagCreate
-from backend.app.services.common import require_active_project, transaction
+from backend.app.services.common import record_activity, require_active_project, transaction
 
 DEFAULT_TAGS: tuple[tuple[str, str], ...] = (
     ("Business", "#ff5fa2"),
@@ -54,7 +53,7 @@ def create_tag(engine: Engine | Connection, project_id: UUID, command: TagCreate
                 "color": command.color,
             },
         )
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),

@@ -128,3 +128,16 @@ external database and reverse proxy.
 Google Fonts and HTMX are currently loaded from public CDNs by the base template. A browser needs
 network access to those origins for the intended typography and HTMX interactions; production
 hardening may vendor and pin these assets locally.
+
+## Agent tool boundary and tracing
+
+`backend/app/agent/` is a Python HTTP client, with generated tool argument schemas and fixed
+`/api/v1` endpoint mappings. It never calls application services or repositories directly. The
+trusted host chooses capability scopes and approves proposals outside model arguments. Deletion
+and tag creation require a distinct human-confirmation callback. This does not replace future
+server authentication and authorization.
+
+API request hooks bind a validated correlation ID to a context variable and return it as a response
+header. A shared service helper attaches the ID to activity details before calling the repository
+within the existing transaction. Request teardown resets the context, including on errors. This
+uses the existing JSON details column and requires no migration or historical backfill.

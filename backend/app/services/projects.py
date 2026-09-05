@@ -13,7 +13,12 @@ from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.schemas.projects import ProjectCreate, ProjectUpdate
 from backend.app.services import tags as tag_service
-from backend.app.services.common import require_active_project, require_version, transaction
+from backend.app.services.common import (
+    record_activity,
+    require_active_project,
+    require_version,
+    transaction,
+)
 
 
 def create_project(engine: Engine | Connection, command: ProjectCreate) -> ProjectRow:
@@ -30,7 +35,7 @@ def create_project(engine: Engine | Connection, command: ProjectCreate) -> Proje
                 },
             )
             tag_service.create_default_tags(connection, project_id)
-            activity_repository.create_activity_event(
+            record_activity(
                 connection,
                 {
                     "id": uuid4(),
@@ -98,7 +103,7 @@ def update_project(
                 if expected_version is not None:
                     raise version_conflict()
                 raise not_found("Project", str(project_id))
-            activity_repository.create_activity_event(
+            record_activity(
                 connection,
                 {
                     "id": uuid4(),
@@ -166,7 +171,7 @@ def set_project_archived(
             if expected_version is not None:
                 raise version_conflict()
             raise not_found("Project", str(project_id))
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),

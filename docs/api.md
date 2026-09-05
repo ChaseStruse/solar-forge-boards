@@ -268,3 +268,16 @@ Application and HTTP errors use an `error` envelope with a stable `code`:
 Schema failures return `422 validation_error` with a Pydantic `details` array. Domain validation may
 also return `422`, such as `invalid_story_tags`. Unique-name conflicts and invalid transitions return
 `409`; unknown resources return `404`. Malformed UUIDs in route paths are handled as `404` by Flask.
+
+## Correlation tracing
+
+Every `/api/v1/` response, including validation and HTTP errors, returns `X-Correlation-ID`.
+Clients may supply that header to connect requests to an agent plan; otherwise the server generates
+a UUID. IDs must be 1–128 characters, start with an ASCII letter or digit, and contain only ASCII
+letters, digits, `.`, `_`, `:`, or `-`. Invalid headers return `422 invalid_correlation_id` with a
+fresh valid response trace. IDs are tracing labels, not credentials; do not include secrets.
+
+Activity created by an API request includes the trace in `details.correlation_id`, written in the
+same transaction as the domain change. Existing activity and non-API writes may omit it. No-op and
+failed commands create no new activity. Idempotent replays echo the retry's trace on the response
+and leave the original activity trace unchanged.

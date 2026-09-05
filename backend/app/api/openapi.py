@@ -180,7 +180,7 @@ def openapi_document() -> dict[str, Any]:
     )
     project_id: dict[str, Any] = uuid_parameter("project_id")
     work_item_id: dict[str, Any] = uuid_parameter("work_item_id")
-    return {
+    document: dict[str, Any] = {
         "openapi": "3.1.0",
         "info": {
             "title": "Solar Forge Boards API",
@@ -283,6 +283,23 @@ def openapi_document() -> dict[str, Any]:
         },
         "components": {"schemas": generated_components(schemas)},
     }
+    for path in document["paths"].values():
+        path.setdefault("parameters", []).append(
+            {
+                "name": "X-Correlation-ID",
+                "in": "header",
+                "description": "Trace generated when omitted and echoed on responses.",
+                "schema": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+            }
+        )
+        for method in ("get", "post", "patch", "delete"):
+            if method in path:
+                for response in path[method]["responses"].values():
+                    response.setdefault("headers", {})["X-Correlation-ID"] = {
+                        "schema": {"type": "string"},
+                        "description": "Request trace, also returned on errors.",
+                    }
+    return document
 
 
 @openapi_blueprint.get("/openapi.json")

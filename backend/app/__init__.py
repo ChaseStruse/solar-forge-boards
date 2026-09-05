@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import Engine
 from werkzeug.exceptions import HTTPException
 
+from backend.app.api.correlation import register_correlation
 from backend.app.api.health import health_blueprint
 from backend.app.api.openapi import openapi_blueprint
 from backend.app.api.projects import projects_blueprint
@@ -43,6 +44,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(work_items_blueprint)
     app.register_blueprint(ui_blueprint)
 
+    register_correlation(app)
     register_error_handlers(app)
     return app
 

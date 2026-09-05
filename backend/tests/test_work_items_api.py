@@ -207,6 +207,7 @@ def test_delete_work_item_preserves_activity_history(
     assert created_event["work_item_id"] is None
     assert deleted_event["work_item_id"] is None
     assert deleted_event["details"] == {
+        "correlation_id": deleted.headers["X-Correlation-ID"],
         "status": "todo",
         "title": "Connect agent",
         "work_item_id": work_item_id,
@@ -255,7 +256,12 @@ def test_valid_status_transition_creates_activity(
     events = client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
     assert any(
         event["event_type"] == "work_item.status_changed"
-        and event["details"] == {"from": "todo", "to": "in_progress"}
+        and event["details"]
+        == {
+            "from": "todo",
+            "to": "in_progress",
+            "correlation_id": response.headers["X-Correlation-ID"],
+        }
         for event in events
     )
 

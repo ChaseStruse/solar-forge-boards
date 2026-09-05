@@ -12,7 +12,6 @@ from sqlalchemy import Connection, Engine
 from backend.app.domain import WorkItemStatus, can_transition
 from backend.app.errors import AppError, not_found, version_conflict
 from backend.app.models import ProjectRow, TagRow, WorkItemRow, WorkItemWithTagsRow
-from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.repositories import tags as tag_repository
 from backend.app.repositories import work_items as work_item_repository
@@ -22,7 +21,12 @@ from backend.app.schemas.work_items import (
     WorkItemCreate,
     WorkItemUpdate,
 )
-from backend.app.services.common import require_active_project, require_version, transaction
+from backend.app.services.common import (
+    record_activity,
+    require_active_project,
+    require_version,
+    transaction,
+)
 
 
 class WorkItemPage(TypedDict):
@@ -63,7 +67,7 @@ def create_work_item(
         tag_repository.replace_work_item_tags(
             connection, work_item_id, [tag["id"] for tag in selected_tags]
         )
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),
@@ -207,7 +211,7 @@ def delete_work_item(engine: Engine | Connection, work_item_id: UUID) -> UUID:
         deleted: bool = work_item_repository.delete_work_item(connection, work_item_id)
         if not deleted:
             raise not_found("Work item", str(work_item_id))
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),
@@ -283,7 +287,7 @@ def update_work_item(
             tag_repository.replace_work_item_tags(
                 connection, work_item_id, [tag["id"] for tag in selected_tags]
             )
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),
@@ -338,7 +342,7 @@ def transition_work_item(
             if expected_version is not None:
                 raise version_conflict()
             raise not_found("Work item", str(work_item_id))
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),
@@ -399,7 +403,7 @@ def move_work_item_priority(
             if expected_version is not None:
                 raise version_conflict()
             raise not_found("Work item", str(work_item_id))
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),
