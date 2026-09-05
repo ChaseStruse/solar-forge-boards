@@ -3,7 +3,7 @@
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Connection, Result, delete, insert, select, update
+from sqlalchemy import Connection, Result, and_, delete, insert, select, update
 
 from backend.app.models import ProjectRow, projects
 
@@ -28,11 +28,18 @@ def get_project(connection: Connection, project_id: UUID) -> ProjectRow | None:
 
 
 def update_project(
-    connection: Connection, project_id: UUID, values: dict[str, Any]
+    connection: Connection,
+    project_id: UUID,
+    values: dict[str, Any],
+    *,
+    expected_version: int | None = None,
 ) -> ProjectRow | None:
     """Update and return a project."""
+    conditions: list[Any] = [projects.c.id == project_id]
+    if expected_version is not None:
+        conditions.append(projects.c.version == expected_version)
     result: Result[Any] = connection.execute(
-        update(projects).where(projects.c.id == project_id).values(**values).returning(projects)
+        update(projects).where(and_(*conditions)).values(**values).returning(projects)
     )
     row: Any = result.mappings().one_or_none()
     return cast(ProjectRow, dict(row)) if row is not None else None

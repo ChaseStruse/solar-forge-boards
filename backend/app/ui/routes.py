@@ -101,22 +101,7 @@ def render_project_board(
     project_error: str | None = None,
 ) -> str:
     """Render a board with its complete project tag vocabulary."""
-    project: ProjectRow = project_service.get_project(get_engine(), project_id, html=True)
-    filters: WorkItemListFilter = WorkItemListFilter.model_validate(
-        {
-            "search": request.args.get("search"),
-            "sort": request.args.get("sort", "priority"),
-            "direction": request.args.get("direction", "asc"),
-        }
-    )
-    items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(
-        get_engine(),
-        project_id,
-        search=filters.search,
-        sort=filters.sort,
-        direction=filters.direction,
-    )
-    project_tags: list[TagRow] = tag_service.list_project_tags(get_engine(), project_id)
+    context = board_context(project_id)
     active_tab: str = request.args.get("tab", "board")
     if active_tab not in {"board", "activity"}:
         active_tab = "board"
@@ -127,18 +112,11 @@ def render_project_board(
     )
     return render_template(
         "board.html",
-        project=project,
-        project_id=project_id,
-        project_archived=project["archived_at"] is not None,
+        **context,
         active_tab=active_tab,
-        grouped_items=group_work_items(items),
-        project_tags=project_tags,
         tag_error=tag_error,
         project_error=project_error,
         activity=activity,
-        filters=filters,
-        statuses=list(WorkItemStatus),
-        allowed_transitions=ALLOWED_TRANSITIONS,
     )
 
 
@@ -200,18 +178,42 @@ def delete_work_item(work_item_id: UUID) -> tuple[str, int]:
 
 def render_board_fragment(project_id: UUID) -> str:
     """Render the board columns for HTMX swaps."""
+    return render_template("partials/board_columns.html", **board_context(project_id))
+
+
+def board_context(project_id: UUID) -> dict[str, Any]:
+    """Build the same filtered presentation data for pages and HTMX swaps."""
     project: ProjectRow = project_service.get_project(get_engine(), project_id, html=True)
-    items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(get_engine(), project_id)
-    project_tags: list[TagRow] = tag_service.list_project_tags(get_engine(), project_id)
-    return render_template(
-        "partials/board_columns.html",
-        project_id=project_id,
-        project_archived=project["archived_at"] is not None,
-        grouped_items=group_work_items(items),
-        project_tags=project_tags,
-        statuses=list(WorkItemStatus),
-        allowed_transitions=ALLOWED_TRANSITIONS,
+    filters: WorkItemListFilter = WorkItemListFilter.model_validate(
+        {
+            "search": request.args.get("search"),
+            "sort": request.args.get("sort", "priority"),
+            "direction": request.args.get("direction", "asc"),
+        }
     )
+    items: list[WorkItemWithTagsRow] = work_item_service.list_work_items(
+        get_engine(),
+        project_id,
+        search=filters.search,
+        sort=filters.sort,
+        direction=filters.direction,
+    )
+    project_tags: list[TagRow] = tag_service.list_project_tags(get_engine(), project_id)
+    return {
+        "project": project,
+        "project_id": project_id,
+        "project_archived": project["archived_at"] is not None,
+        "grouped_items": group_work_items(items),
+        "project_tags": project_tags,
+        "filters": filters,
+        "board_query": {
+            "search": filters.search or "",
+            "sort": filters.sort,
+            "direction": filters.direction,
+        },
+        "statuses": list(WorkItemStatus),
+        "allowed_transitions": ALLOWED_TRANSITIONS,
+    }
 
 
 def group_work_items(

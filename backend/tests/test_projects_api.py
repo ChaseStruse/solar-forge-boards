@@ -1,5 +1,6 @@
 """Project API behavior."""
 
+import pytest
 from flask.testing import FlaskClient
 
 
@@ -71,3 +72,44 @@ def test_project_can_be_edited_archived_and_restored(client: FlaskClient, projec
         for event in client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
     }
     assert {"project.updated", "project.archived", "project.restored"} <= event_types
+
+
+def test_project_conditional_write_rejects_a_stale_etag(
+    client: FlaskClient, project_id: str
+) -> None:
+    """Agents can avoid overwriting a project revision they did not read."""
+    fetched = client.get(f"/api/v1/projects/{project_id}")
+    assert fetched.headers["ETag"] == '"1"'
+
+    first = client.patch(
+        f"/api/v1/projects/{project_id}",
+        headers={"If-Match": fetched.headers["ETag"]},
+        json={"description": "First editor wins."},
+    )
+    assert first.status_code == 200
+    assert first.headers["ETag"] == '"2"'
+
+    stale = client.patch(
+        f"/api/v1/projects/{project_id}",
+        headers={"If-Match": fetched.headers["ETag"]},
+        json={"description": "Old editor must not overwrite."},
+    )
+    assert stale.status_code == 409
+    assert stale.get_json()["error"]["code"] == "version_conflict"
+
+
+@pytest.mark.parametrize("operation", ["update", "archive", "restore"])
+def test_stale_noop_project_write_is_rejected(
+    client: FlaskClient, project_id: str, operation: str
+) -> None:
+    """Project no-ops enforce revisions just like meaningful writes."""
+    path = f"/api/v1/projects/{project_id}"
+    client.patch(path, json={"name": "Current"})
+    if operation == "archive":
+        client.post(f"{path}/archive")
+    if operation == "update":
+        response = client.patch(path, json={"name": "Current"}, headers={"If-Match": '"1"'})
+    else:
+        response = client.post(f"{path}/{operation}", headers={"If-Match": '"1"'})
+    assert response.status_code == 409
+    assert response.get_json()["error"]["code"] == "version_conflict"

@@ -1,13 +1,16 @@
 """Work-item use cases and lifecycle rules."""
 
+import base64
+import binascii
+import json
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, Engine
 
 from backend.app.domain import WorkItemStatus, can_transition
-from backend.app.errors import AppError, not_found
+from backend.app.errors import AppError, not_found, version_conflict
 from backend.app.models import ProjectRow, TagRow, WorkItemRow, WorkItemWithTagsRow
 from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
@@ -19,18 +22,26 @@ from backend.app.schemas.work_items import (
     WorkItemCreate,
     WorkItemUpdate,
 )
+from backend.app.services.common import require_active_project, require_version, transaction
+
+
+class WorkItemPage(TypedDict):
+    """A cursor page of stories and the continuation token, if any."""
+
+    items: list[WorkItemWithTagsRow]
+    next_cursor: str | None
 
 
 def create_work_item(
-    engine: Engine, project_id: UUID, command: WorkItemCreate
+    engine: Engine | Connection, project_id: UUID, command: WorkItemCreate
 ) -> WorkItemWithTagsRow:
     """Create a work item and activity event in one transaction."""
     work_item_id: UUID = uuid4()
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         project: ProjectRow | None = project_repository.get_project(connection, project_id)
         if project is None:
             raise not_found("Project", str(project_id))
-        ensure_project_is_active(project)
+        require_active_project(project)
         selected_tags: list[TagRow] = validate_tags(connection, project_id, command.tag_ids)
         item: WorkItemRow = work_item_repository.create_work_item(
             connection,
@@ -84,15 +95,17 @@ def list_work_items(
         project: ProjectRow | None = project_repository.get_project(connection, project_id)
         if project is None:
             raise not_found("Project", str(project_id))
-        items: list[WorkItemRow] = work_item_repository.list_work_items(
-            connection, project_id, search=search, sort=sort, direction=direction
+        if filter_tag_ids:
+            validate_tags(connection, project_id, list(set(filter_tag_ids)))
+        items = work_item_repository.list_work_items(
+            connection,
+            project_id,
+            search=search,
+            sort=sort,
+            direction=direction,
+            filter_tag_ids=filter_tag_ids,
         )
-        enriched: list[WorkItemWithTagsRow] = enrich_work_items(connection, items)
-        if not filter_tag_ids:
-            return enriched
-        selected_tags: list[TagRow] = validate_tags(connection, project_id, filter_tag_ids)
-        selected_ids: set[UUID] = {tag["id"] for tag in selected_tags}
-        return [item for item in enriched if any(tag["id"] in selected_ids for tag in item["tags"])]
+        return enrich_work_items(connection, items)
 
 
 def get_work_item(engine: Engine, work_item_id: UUID) -> WorkItemWithTagsRow:
@@ -102,6 +115,75 @@ def get_work_item(engine: Engine, work_item_id: UUID) -> WorkItemWithTagsRow:
         if item is None:
             raise not_found("Work item", str(work_item_id))
         return enrich_work_items(connection, [item])[0]
+
+
+def list_work_items_page(
+    engine: Engine,
+    project_id: UUID,
+    *,
+    filter_tag_ids: list[UUID],
+    search: str | None,
+    sort: str,
+    direction: str,
+    limit: int,
+    cursor: str | None,
+) -> WorkItemPage:
+    """Return a stable cursor page for one complete filtered story collection."""
+    last_id = (
+        decode_cursor(
+            cursor,
+            search=search,
+            filter_tag_ids=filter_tag_ids,
+            sort=sort,
+            direction=direction,
+        )
+        if cursor is not None
+        else None
+    )
+    with engine.connect() as connection:
+        if project_repository.get_project(connection, project_id) is None:
+            raise not_found("Project", str(project_id))
+        validate_tags(connection, project_id, list(set(filter_tag_ids)))
+        anchor = None
+        if last_id is not None:
+            anchors = work_item_repository.list_work_items(
+                connection,
+                project_id,
+                search=search,
+                sort=sort,
+                direction=direction,
+                filter_tag_ids=filter_tag_ids,
+                work_item_id=last_id,
+                limit=1,
+            )
+            if not anchors:
+                raise AppError(
+                    "invalid_cursor", "The cursor no longer belongs to this collection.", 422
+                )
+            anchor = anchors[0]
+        items = work_item_repository.list_work_items(
+            connection,
+            project_id,
+            search=search,
+            sort=sort,
+            direction=direction,
+            filter_tag_ids=filter_tag_ids,
+            after=anchor,
+            limit=limit + 1,
+        )
+        page_items = enrich_work_items(connection, items[:limit])
+    next_cursor = (
+        encode_cursor(
+            page_items[-1]["id"],
+            search=search,
+            filter_tag_ids=filter_tag_ids,
+            sort=sort,
+            direction=direction,
+        )
+        if len(items) > limit
+        else None
+    )
+    return {"items": page_items, "next_cursor": next_cursor}
 
 
 def get_work_item_by_reference_number(engine: Engine, reference_number: int) -> WorkItemWithTagsRow:
@@ -115,9 +197,9 @@ def get_work_item_by_reference_number(engine: Engine, reference_number: int) -> 
         return enrich_work_items(connection, [item])[0]
 
 
-def delete_work_item(engine: Engine, work_item_id: UUID) -> UUID:
+def delete_work_item(engine: Engine | Connection, work_item_id: UUID) -> UUID:
     """Delete one work item while retaining an audit event for its project."""
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
@@ -143,13 +225,18 @@ def delete_work_item(engine: Engine, work_item_id: UUID) -> UUID:
 
 
 def update_work_item(
-    engine: Engine, work_item_id: UUID, command: WorkItemUpdate
+    engine: Engine | Connection,
+    work_item_id: UUID,
+    command: WorkItemUpdate,
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
     """Update editable fields and record exactly what changed."""
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
+        require_version(existing["version"], expected_version)
         ensure_work_item_project_is_active(connection, existing)
 
         changes: dict[str, Any] = {}
@@ -184,10 +271,13 @@ def update_work_item(
         if not changes and not tags_changed:
             return enrich_work_item(existing, existing_tags)
         changes["updated_at"] = datetime.now(UTC)
+        changes["version"] = existing["version"] + 1
         updated: WorkItemRow | None = work_item_repository.update_work_item(
-            connection, work_item_id, changes
+            connection, work_item_id, changes, expected_version=expected_version
         )
         if updated is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Work item", str(work_item_id))
         if tags_changed:
             tag_repository.replace_work_item_tags(
@@ -207,13 +297,18 @@ def update_work_item(
 
 
 def transition_work_item(
-    engine: Engine, work_item_id: UUID, command: StatusTransition
+    engine: Engine | Connection,
+    work_item_id: UUID,
+    command: StatusTransition,
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
     """Apply a valid lifecycle transition and record it."""
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
+        require_version(existing["version"], expected_version)
         ensure_work_item_project_is_active(connection, existing)
         current: WorkItemStatus = WorkItemStatus(str(existing["status"]))
         target: WorkItemStatus = command.status
@@ -235,9 +330,13 @@ def transition_work_item(
                     connection, existing["project_id"], target.value
                 ),
                 "updated_at": datetime.now(UTC),
+                "version": existing["version"] + 1,
             },
+            expected_version=expected_version,
         )
         if updated is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Work item", str(work_item_id))
         activity_repository.create_activity_event(
             connection,
@@ -253,13 +352,18 @@ def transition_work_item(
 
 
 def move_work_item_priority(
-    engine: Engine, work_item_id: UUID, command: PriorityMove
+    engine: Engine | Connection,
+    work_item_id: UUID,
+    command: PriorityMove,
+    *,
+    expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
     """Swap a story with its adjacent priority peer in the current workflow lane."""
-    with engine.begin() as connection:
+    with transaction(engine) as connection:
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
             raise not_found("Work item", str(work_item_id))
+        require_version(existing["version"], expected_version)
         ensure_work_item_project_is_active(connection, existing)
         lane_items: list[WorkItemRow] = work_item_repository.list_work_items_by_status(
             connection, existing["project_id"], existing["status"]
@@ -273,12 +377,27 @@ def move_work_item_priority(
         neighbor: WorkItemRow = lane_items[target_index]
         now: datetime = datetime.now(UTC)
         moved: WorkItemRow | None = work_item_repository.update_work_item(
-            connection, work_item_id, {"priority": neighbor["priority"], "updated_at": now}
+            connection,
+            work_item_id,
+            {
+                "priority": neighbor["priority"],
+                "updated_at": now,
+                "version": existing["version"] + 1,
+            },
+            expected_version=expected_version,
         )
         work_item_repository.update_work_item(
-            connection, neighbor["id"], {"priority": existing["priority"], "updated_at": now}
+            connection,
+            neighbor["id"],
+            {
+                "priority": existing["priority"],
+                "updated_at": now,
+                "version": neighbor["version"] + 1,
+            },
         )
         if moved is None:
+            if expected_version is not None:
+                raise version_conflict()
             raise not_found("Work item", str(work_item_id))
         activity_repository.create_activity_event(
             connection,
@@ -309,18 +428,60 @@ def validate_tags(connection: Connection, project_id: UUID, tag_ids: list[UUID])
     return selected
 
 
-def ensure_project_is_active(project: ProjectRow) -> None:
-    """Reject writes into a project retained as read-only history."""
-    if project["archived_at"] is not None:
-        raise AppError("project_archived", "Archived projects are read-only.", 409)
-
-
 def ensure_work_item_project_is_active(connection: Connection, item: WorkItemRow) -> None:
     """Resolve a story's project before a write so archived projects cannot change."""
     project: ProjectRow | None = project_repository.get_project(connection, item["project_id"])
     if project is None:
         raise not_found("Project", str(item["project_id"]))
-    ensure_project_is_active(project)
+    require_active_project(project)
+
+
+def encode_cursor(
+    last_id: UUID,
+    *,
+    search: str | None,
+    filter_tag_ids: list[UUID],
+    sort: str,
+    direction: str,
+) -> str:
+    """Create an opaque cursor bound to one query's filters and ordering."""
+    payload: dict[str, Any] = {
+        "v": 1,
+        "last_id": str(last_id),
+        "search": search,
+        "tag_ids": sorted(str(tag_id) for tag_id in set(filter_tag_ids)),
+        "sort": sort,
+        "direction": direction,
+    }
+    raw: bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def decode_cursor(
+    cursor: str,
+    *,
+    search: str | None,
+    filter_tag_ids: list[UUID],
+    sort: str,
+    direction: str,
+) -> UUID:
+    """Validate an opaque cursor against the collection query it continues."""
+    try:
+        padded: str = cursor + "=" * (-len(cursor) % 4)
+        payload: dict[str, Any] = json.loads(base64.urlsafe_b64decode(padded))
+        last_id: UUID = UUID(str(payload["last_id"]))
+    except (binascii.Error, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AppError("invalid_cursor", "The cursor is invalid.", 422) from error
+    expected: dict[str, Any] = {
+        "v": 1,
+        "search": search,
+        "tag_ids": sorted(str(tag_id) for tag_id in set(filter_tag_ids)),
+        "sort": sort,
+        "direction": direction,
+    }
+    if any(payload.get(key) != value for key, value in expected.items()):
+        raise AppError("invalid_cursor", "The cursor does not match this collection query.", 422)
+    return last_id
 
 
 def enrich_work_item(item: WorkItemRow, item_tags: list[TagRow]) -> WorkItemWithTagsRow:

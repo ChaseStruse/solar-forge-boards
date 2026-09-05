@@ -78,6 +78,77 @@ def uuid_parameter(name: str) -> dict[str, Any]:
     }
 
 
+def write_safety_parameters(*, conditional: bool) -> list[dict[str, Any]]:
+    """Describe the replay and optimistic-concurrency headers accepted by writes."""
+    parameters: list[dict[str, Any]] = [
+        {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Optional unique key that safely replays the same write response.",
+            "schema": {"type": "string", "minLength": 1, "maxLength": 255},
+        }
+    ]
+    if conditional:
+        parameters.append(
+            {
+                "name": "If-Match",
+                "in": "header",
+                "description": "Optional quoted ETag from the current project or story response.",
+                "schema": {"type": "string"},
+            }
+        )
+    return parameters
+
+
+def work_item_list_parameters() -> list[dict[str, Any]]:
+    """Describe story collection filters and the opt-in cursor traversal contract."""
+    return [
+        {
+            "name": "tag_id",
+            "in": "query",
+            "description": "Repeat to match stories with any selected project tag.",
+            "style": "form",
+            "explode": True,
+            "schema": {
+                "type": "array",
+                "items": {"type": "string", "format": "uuid"},
+                "maxItems": 20,
+            },
+        },
+        {
+            "name": "search",
+            "in": "query",
+            "schema": {"type": "string", "maxLength": 200},
+        },
+        {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+                "type": "string",
+                "enum": ["priority", "created_at", "updated_at", "title", "status"],
+                "default": "priority",
+            },
+        },
+        {
+            "name": "direction",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["asc", "desc"], "default": "asc"},
+        },
+        {
+            "name": "limit",
+            "in": "query",
+            "description": "Opt into cursor pagination with 1 to 100 stories per response.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 100},
+        },
+        {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation token from meta.next_cursor; requires limit.",
+            "schema": {"type": "string", "maxLength": 2048},
+        },
+    ]
+
+
 def generated_components(models: tuple[type[BaseModel], ...]) -> dict[str, Any]:
     """Generate reusable OpenAPI components, including Pydantic nested definitions."""
     components: dict[str, Any] = {}
@@ -120,6 +191,7 @@ def openapi_document() -> dict[str, Any]:
             "/api/v1/projects": {
                 "get": {"responses": data_collection_response(ProjectRead, "Projects")},
                 "post": {
+                    "parameters": write_safety_parameters(conditional=False),
                     "requestBody": request_body(ProjectCreate),
                     "responses": data_response(ProjectRead, "201", "Project created"),
                 },
@@ -128,30 +200,39 @@ def openapi_document() -> dict[str, Any]:
                 "parameters": [project_id],
                 "get": {"responses": data_response(ProjectRead, "200", "Project")},
                 "patch": {
+                    "parameters": write_safety_parameters(conditional=True),
                     "requestBody": request_body(ProjectUpdate),
                     "responses": data_response(ProjectRead, "200", "Project updated"),
                 },
             },
             "/api/v1/projects/{project_id}/archive": {
                 "parameters": [project_id],
-                "post": {"responses": data_response(ProjectRead, "200", "Project archived")},
+                "post": {
+                    "parameters": write_safety_parameters(conditional=True),
+                    "responses": data_response(ProjectRead, "200", "Project archived"),
+                },
             },
             "/api/v1/projects/{project_id}/restore": {
                 "parameters": [project_id],
-                "post": {"responses": data_response(ProjectRead, "200", "Project restored")},
+                "post": {
+                    "parameters": write_safety_parameters(conditional=True),
+                    "responses": data_response(ProjectRead, "200", "Project restored"),
+                },
             },
             "/api/v1/projects/{project_id}/tags": {
                 "parameters": [project_id],
                 "get": {"responses": data_collection_response(TagRead, "Project tags")},
                 "post": {
+                    "parameters": write_safety_parameters(conditional=False),
                     "requestBody": request_body(TagCreate),
                     "responses": data_response(TagRead, "201", "Tag created"),
                 },
             },
             "/api/v1/projects/{project_id}/work-items": {
-                "parameters": [project_id],
+                "parameters": [project_id, *work_item_list_parameters()],
                 "get": {"responses": data_collection_response(WorkItemRead, "Project stories")},
                 "post": {
+                    "parameters": write_safety_parameters(conditional=False),
                     "requestBody": request_body(WorkItemCreate),
                     "responses": data_response(WorkItemRead, "201", "Story created"),
                 },
@@ -177,6 +258,7 @@ def openapi_document() -> dict[str, Any]:
                 "parameters": [work_item_id],
                 "get": {"responses": data_response(WorkItemRead, "200", "Story")},
                 "patch": {
+                    "parameters": write_safety_parameters(conditional=True),
                     "requestBody": request_body(WorkItemUpdate),
                     "responses": data_response(WorkItemRead, "200", "Story updated"),
                 },
@@ -185,6 +267,7 @@ def openapi_document() -> dict[str, Any]:
             "/api/v1/work-items/{work_item_id}/transitions": {
                 "parameters": [work_item_id],
                 "post": {
+                    "parameters": write_safety_parameters(conditional=True),
                     "requestBody": request_body(StatusTransition),
                     "responses": data_response(WorkItemRead, "200", "Story transitioned"),
                 },
@@ -192,6 +275,7 @@ def openapi_document() -> dict[str, Any]:
             "/api/v1/work-items/{work_item_id}/priority": {
                 "parameters": [work_item_id],
                 "post": {
+                    "parameters": write_safety_parameters(conditional=True),
                     "requestBody": request_body(PriorityMove),
                     "responses": data_response(WorkItemRead, "200", "Story reprioritized"),
                 },

@@ -8,7 +8,9 @@ layer.
 Give Solar-Forge a narrowly scoped HTTP toolset backed by `/api/v1`:
 
 1. List and get projects to resolve business context.
-2. List project tags and list work items, optionally filtering by repeated tag IDs.
+2. List project tags and list work items, optionally filtering by repeated tag IDs. For a complete
+   project synchronization, set `limit`, retain the query controls, and follow `meta.next_cursor`
+   until it is null.
 3. Get a work item to read its human description, technical description, repository link, status,
    and embedded tag objects.
 4. Create work items from approved plans and assign only tags belonging to that project.
@@ -49,6 +51,11 @@ Multiple `tag_id` list filters use OR semantics. For compound reasoning, retriev
 perform any required AND logic in the client. Because each returned story embeds its tags, the agent
 can classify results without another tag lookup.
 
+Story collection pagination is opt-in: use a `limit` of 1 through 100, then send the opaque
+`meta.next_cursor` alongside the identical `tag_id`, `search`, `sort`, and `direction` controls.
+Changing those controls invalidates the cursor. Omitting `limit` retains the full collection response
+for interactive board clients.
+
 Use `description` for the user need, business rules, and desired outcome. Use
 `technical_description` for architecture, constraints, acceptance details, and implementation notes.
 Use `repository_url` only for a complete HTTP(S) link. Keeping these fields distinct makes retrieved
@@ -57,9 +64,11 @@ context easier to route to the appropriate Solar Forge brain or specialist.
 ## Before production agent writes
 
 Add authentication, tenant scoping, service-account identities, and service-layer authorization.
-Extend activity events with `actor_id`, an idempotency key, and an optional correlation ID. Write
-operations should accept idempotency keys so retries cannot create duplicate projects, work items,
-tags, or transitions.
+Extend activity events with `actor_id` and an optional correlation ID. Public JSON writes already
+accept an `Idempotency-Key`: retain the same key when retrying one intended action, and generate a
+new key for a new action. Projects and stories return an ETag; send it as `If-Match` for updates,
+transitions, priority moves, archive, and restore actions so a stale agent does not overwrite newer
+work.
 
 For autonomous actions, use policy scopes such as `projects:read`, `tags:read`, `tags:write`,
 `work_items:write`, `work_items:transition`, and `work_items:delete`. High-impact transitions and

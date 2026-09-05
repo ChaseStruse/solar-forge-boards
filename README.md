@@ -94,7 +94,8 @@ docs/                        User, API, architecture, development, and agent-int
 
 ## Current boundaries
 
-Authentication, authorization, multi-tenancy, pagination, assignments, comments, tag editing or
-deletion, permanent project deletion, and webhooks are not implemented. Do not expose the current application
+Authentication, authorization, multi-tenancy, assignments, comments, activity pagination, tag editing or
+deletion, permanent project deletion, and webhooks are not implemented. Story collection cursor pagination is
+available for API clients. Do not expose the current application
 to untrusted networks. The service and repository boundaries are designed so these capabilities can
 be added without coupling API clients to the HTML interface.

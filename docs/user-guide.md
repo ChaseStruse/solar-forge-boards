@@ -72,8 +72,11 @@ Tags cannot currently be renamed or deleted.
 ## Search, sorting, and history
 
 Use the search field at the top of the board to find stories by title, description, or technical
-notes. The sort controls apply on the server, so they work consistently with the JSON API. Open the
+notes. The sort controls apply on the server, so they work consistently with the JSON API. Creating, editing, moving, or deleting a story preserves
+the active search and sort; a story that no longer matches the search disappears from that view. Open the
 **Activity** tab to review the latest 50 project events, including project edits and archive changes.
+Agent and integration clients can paginate a story collection with an API `limit` and its returned
+cursor; the browser board continues to load the complete board.
 
 ## Board views
 
@@ -93,7 +96,7 @@ follow a user to another browser or device. Hiding a lane does not change or del
 
 ## Current limitations
 
-There are no user accounts or access controls. Assignments, comments, pagination, permanent project
-deletion, tag editing, and tag deletion are not yet available. The board should be
+There are no user accounts or access controls. Assignments, comments, activity pagination, permanent
+project deletion, tag editing, and tag deletion are not yet available. The board should be
 treated as a trusted local or development application until authentication and authorization are
 implemented.

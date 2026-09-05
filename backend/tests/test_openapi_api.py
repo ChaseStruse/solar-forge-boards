@@ -13,6 +13,14 @@ def test_openapi_document_is_generated_from_public_schemas(client: FlaskClient) 
     assert "/api/v1/projects" in paths
     assert "/api/v1/work-items/{work_item_id}/transitions" in paths
     assert "/api/v1/work-items/by-reference/{reference_number}" in paths
+    work_item_collection: dict[str, object] = paths["/api/v1/projects/{project_id}/work-items"]  # type: ignore[assignment]
+    parameters: list[dict[str, object]] = work_item_collection["parameters"]  # type: ignore[assignment]
+    parameter_names: set[object] = {parameter["name"] for parameter in parameters}
+    assert parameter_names >= {"cursor", "limit", "search", "tag_id"}
+    project_collection: dict[str, object] = paths["/api/v1/projects"]  # type: ignore[assignment]
+    create_project: dict[str, object] = project_collection["post"]  # type: ignore[assignment]
+    write_parameters: list[dict[str, object]] = create_project["parameters"]  # type: ignore[assignment]
+    assert write_parameters[0]["name"] == "Idempotency-Key"
     components: dict[str, object] = document["components"]  # type: ignore[assignment]
     schemas: dict[str, object] = components["schemas"]  # type: ignore[assignment]
     assert "WorkItemCreate" in schemas

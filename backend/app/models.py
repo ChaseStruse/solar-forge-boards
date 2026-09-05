@@ -23,6 +23,14 @@ from sqlalchemy.schema import Column
 
 metadata: MetaData = MetaData()
 
+story_reference_counter: Table = Table(
+    "story_reference_counter",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("value", Integer, nullable=False),
+    CheckConstraint("id = 1", name="ck_story_reference_counter_singleton"),
+)
+
 projects: Table = Table(
     "projects",
     metadata,
@@ -30,6 +38,7 @@ projects: Table = Table(
     Column("name", String(120), nullable=False, unique=True),
     Column("description", Text, nullable=False, server_default=""),
     Column("archived_at", DateTime(timezone=True), nullable=True),
+    Column("version", Integer, nullable=False, server_default="1"),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
@@ -52,6 +61,7 @@ work_items: Table = Table(
     Column("acceptance_criteria", JSON, nullable=False, server_default="[]"),
     Column("status", String(32), nullable=False, server_default="todo"),
     Column("priority", Integer, nullable=False, server_default="1"),
+    Column("version", Integer, nullable=False, server_default="1"),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     CheckConstraint(
@@ -120,6 +130,17 @@ Index(
     "ix_activity_events_project_created", activity_events.c.project_id, activity_events.c.created_at
 )
 
+idempotency_requests: Table = Table(
+    "idempotency_requests",
+    metadata,
+    Column("key", String(255), primary_key=True),
+    Column("request_scope", String(255), nullable=False),
+    Column("request_fingerprint", String(64), nullable=False),
+    Column("response_status", Integer, nullable=True),
+    Column("response_data", JSON, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
 
 class ProjectRow(TypedDict):
     """Typed project record returned by the repository."""
@@ -128,6 +149,7 @@ class ProjectRow(TypedDict):
     name: str
     description: str
     archived_at: datetime | None
+    version: int
     created_at: datetime
     updated_at: datetime
 
@@ -145,6 +167,7 @@ class WorkItemRow(TypedDict):
     acceptance_criteria: list[str]
     status: str
     priority: int
+    version: int
     created_at: datetime
     updated_at: datetime
 
@@ -173,4 +196,15 @@ class ActivityRow(TypedDict):
     work_item_id: UUID | None
     event_type: str
     details: dict[str, Any]
+    created_at: datetime
+
+
+class IdempotencyRequestRow(TypedDict):
+    """Persisted result of one replay-safe JSON write request."""
+
+    key: str
+    request_scope: str
+    request_fingerprint: str
+    response_status: int | None
+    response_data: dict[str, Any] | None
     created_at: datetime
