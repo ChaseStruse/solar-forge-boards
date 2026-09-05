@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from flask import Blueprint, Response, request
+from flask import Blueprint, Response, current_app, request
 
 from backend.app.api.idempotency import execute_idempotent
 from backend.app.api.utils import json_model, json_models, parse_if_match, parse_json
@@ -12,6 +12,7 @@ from backend.app.schemas.common import ActivityEventRead
 from backend.app.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from backend.app.schemas.tags import TagCreate, TagRead
 from backend.app.schemas.work_items import WorkItemCreate, WorkItemListFilter, WorkItemRead
+from backend.app.services import github as github_service
 from backend.app.services import projects as project_service
 from backend.app.services import tags as tag_service
 from backend.app.services import work_items as work_item_service
@@ -200,3 +201,14 @@ def list_project_activity(project_id: UUID) -> Response:
     """List recent immutable activity events for a project."""
     events: list[ActivityRow] = project_service.list_project_activity(get_engine(), project_id)
     return json_models([ActivityEventRead.model_validate(event) for event in events])
+
+
+@projects_blueprint.get("/projects/<uuid:project_id>/repositories")
+def list_project_repositories(project_id: UUID) -> Response:
+    """Read live GitHub snapshots for the project's configured repositories."""
+    snapshots = github_service.project_repositories(
+        get_engine(),
+        project_id,
+        current_app.extensions["github_client"],
+    )
+    return json_models(list(snapshots))

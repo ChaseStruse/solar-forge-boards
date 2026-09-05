@@ -2,11 +2,14 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from sqlalchemy import Connection, Engine
 
+from backend.app.correlation import correlation_id
 from backend.app.errors import AppError, version_conflict
-from backend.app.models import ProjectRow
+from backend.app.models import ActivityRow, ProjectRow
+from backend.app.repositories import activity as activity_repository
 
 
 @contextmanager
@@ -29,3 +32,11 @@ def require_version(actual: int, expected: int | None) -> None:
     """Check conditional requests even when the requested operation is a no-op."""
     if expected is not None and actual != expected:
         raise version_conflict()
+
+
+def record_activity(connection: Connection, values: dict[str, Any]) -> ActivityRow:
+    """Attach the current trace without changing event transaction boundaries."""
+    trace = correlation_id.get()
+    if trace is not None:
+        values = {**values, "details": {**values["details"], "correlation_id": trace}}
+    return activity_repository.create_activity_event(connection, values)

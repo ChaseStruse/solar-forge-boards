@@ -14,7 +14,7 @@
   </form>
   {% if project.archived_at %}
   <div class="archive-notice"><p class="eyebrow">Archived</p><p>This project is read-only. Restore it to plan or change stories.</p><form method="post" action="{{ url_for('ui.restore_project', project_id=project.id) }}"><button type="submit">Restore project</button></form></div>
-  {% else %}
+  {% elif active_tab == 'board' %}
   <details class="story-composer">
     <summary><span aria-hidden="true">＋</span> Forge a story</summary>
     <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id, **board_query) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) { this.reset(); this.closest('details').removeAttribute('open'); }">
@@ -26,7 +26,8 @@
       <label>Description <textarea name="description" maxlength="10000" rows="3" placeholder="The user need, context, and intended outcome…"></textarea></label>
       <label>Technical description <textarea name="technical_description" maxlength="20000" rows="4" placeholder="Implementation notes, constraints, APIs, or acceptance details…"></textarea></label>
       <label>Acceptance criteria <textarea name="acceptance_criteria" rows="4" maxlength="50099" placeholder="One verifiable outcome per line"></textarea><span class="field-note">One clear, verifiable outcome per line.</span></label>
-      <label>Repository link <input name="repository_url" type="url" maxlength="2048" placeholder="https://github.com/organization/repository"></label>
+      <label>Repository link <input name="repository_url" type="url" maxlength="2048" list="project-repository-options" value="{{ project.repository_urls[0] if project.repository_urls else '' }}" placeholder="https://github.com/organization/repository"></label>
+      <datalist id="project-repository-options">{% for repository in project.repository_urls %}<option value="{{ repository }}">{% endfor %}</datalist>
       <fieldset class="tag-picker">
         <legend>Tags</legend>
         <div class="tag-options">
@@ -49,6 +50,7 @@
 <nav class="project-tabs" aria-label="Project views">
   <a class="project-tab {% if active_tab == 'board' %}is-active{% endif %}" href="{{ url_for('ui.project_board', project_id=project.id) }}">Board</a>
   <a class="project-tab {% if active_tab == 'activity' %}is-active{% endif %}" href="{{ url_for('ui.project_board', project_id=project.id, tab='activity') }}">Activity</a>
+  <a class="project-tab {% if active_tab == 'repository' %}is-active{% endif %}" href="{{ url_for('ui.project_board', project_id=project.id, tab='repository') }}">Repository</a>
 </nav>
 {% if active_tab == 'board' %}
 <section class="board-toolbar view-system" data-project-id="{{ project.id }}" aria-label="Board view and filter controls">
@@ -118,6 +120,8 @@
   </details>
 </section>
 {% include "partials/board_columns.html" %}
+{% elif active_tab == 'repository' %}
+{% include "partials/repositories.html" %}
 {% else %}
 <section class="activity-panel" aria-labelledby="activity-title">
   <div class="section-header"><h2 id="activity-title">Activity history</h2><span>Latest {{ activity|length }}</span></div>

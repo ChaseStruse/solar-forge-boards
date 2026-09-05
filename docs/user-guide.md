@@ -100,3 +100,19 @@ There are no user accounts or access controls. Assignments, comments, activity p
 project deletion, tag editing, and tag deletion are not yet available. The board should be
 treated as a trusted local or development application until authentication and authorization are
 implemented.
+
+## GitHub repositories
+
+Open the **Repository** tab, expand **Manage repositories**, and enter up to ten complete
+`https://github.com/owner/repository` URLs, one per line. Save to connect them to the board. The tab
+shows stars, forks, open issues plus pull requests, the default branch, and the latest published
+stable release with expandable release notes. Release notes display as plain text. A repository
+without a stable release displays a clear empty state; inaccessible repositories display an error
+without hiding other repositories. Snapshots are cached for one minute per server process.
+
+The first URL is prefilled when forging a new story. Choose another linked URL from the field's
+suggestions, enter another complete HTTP(S) URL, or clear it. Existing stories keep their links when
+the project list changes. Archived boards can view repository stats but cannot edit the connections.
+
+Public repositories work without a token. For private repositories or higher API limits, configure
+`GITHUB_TOKEN` as described in the development guide. GitHub Enterprise hosts are not supported yet.

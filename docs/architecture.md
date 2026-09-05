@@ -128,3 +128,30 @@ external database and reverse proxy.
 Google Fonts and HTMX are currently loaded from public CDNs by the base template. A browser needs
 network access to those origins for the intended typography and HTMX interactions; production
 hardening may vendor and pin these assets locally.
+
+## Agent tool boundary and tracing
+
+`backend/app/agent/` is a Python HTTP client, with generated tool argument schemas and fixed
+`/api/v1` endpoint mappings. It never calls application services or repositories directly. The
+trusted host chooses capability scopes and approves proposals outside model arguments. Deletion
+and tag creation require a distinct human-confirmation callback. This does not replace future
+server authentication and authorization.
+
+API request hooks bind a validated correlation ID to a context variable and return it as a response
+header. A shared service helper attaches the ID to activity details before calling the repository
+within the existing transaction. Request teardown resets the context, including on errors. This
+uses the existing JSON details column and requires no migration or historical backfill.
+
+## GitHub repository integration
+
+Projects store an ordered JSON repository URL list, updated by the existing project service and
+transactional audit path. The first URL supplies the story-creation default only when callers omit
+the story's repository field; explicit empty values remain empty. This keeps UI and API semantics
+consistent without rewriting existing stories.
+
+The Repository tab and public snapshot endpoint call `services/github.py`, which resolves project
+settings before making network requests through `integrations/github.py`. No database connection
+is held during GitHub requests. The GitHub client holds a server-only environment token, bounds
+response sizes, timeouts and concurrency, sanitizes failures, and caches snapshots briefly. Templates
+receive typed snapshots and escape release notes as plain text. This is a single trusted local
+installation; future hosted credentials and authorization remain a separate design task.

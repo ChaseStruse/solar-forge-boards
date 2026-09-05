@@ -3,6 +3,9 @@
 import pytest
 from flask.testing import FlaskClient
 
+from backend.app.integrations.github import GitHubClient
+from backend.app.schemas.github import GitHubRelease, GitHubRepository
+
 
 def test_projects_page_and_board_render(client: FlaskClient, project_id: str) -> None:
     """The human-facing workspace renders projects and board columns."""
@@ -203,3 +206,51 @@ def test_story_writes_preserve_search_and_sort(
     assert "Unrelated" not in html
     assert html.index("Match Z") < html.index("Match A")
     assert "search=Match" in html and "direction=desc" in html
+
+
+def test_repository_tab_and_default_story_link(
+    client: FlaskClient,
+    project_id: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repository settings are shared with the API; upstream notes remain inert text."""
+
+    def snapshots(self: GitHubClient, urls: list[str]) -> list[GitHubRepository]:
+        return [
+            GitHubRepository(
+                url=url,
+                name="owner/repo",
+                stars=12,
+                forks=3,
+                open_issues=4,
+                default_branch="main",
+                release=GitHubRelease(
+                    name="First release",
+                    tag="v1",
+                    url=url + "/releases/tag/v1",
+                    notes="<script>alert(1)</script>",
+                ),
+            )
+            for url in urls
+        ]
+
+    monkeypatch.setattr(GitHubClient, "repositories", snapshots)
+    path = f"/ui/projects/{project_id}"
+    response = client.post(
+        path + "/repositories", data={"repository_urls": "https://github.com/owner/repo"}
+    )
+    assert response.status_code == 302
+    assert "tab=repository" in response.headers["Location"]
+    page = client.get(path + "?tab=repository").text
+    assert "First release" in page and "Open issues + PRs" in page
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+    assert "<script>alert(1)</script>" not in page
+    assert 'rel="noopener noreferrer"' in page
+    board = client.get(path).text
+    assert 'value="https://github.com/owner/repo"' in board
+    invalid = client.post(path + "/repositories", data={"repository_urls": "https://evil.com/a/b"})
+    assert invalid.status_code == 422
+    assert "Use complete" in invalid.text and "Manage repositories" in invalid.text
+    client.post(f"/api/v1/projects/{project_id}/archive")
+    assert "Manage repositories" not in client.get(path + "?tab=repository").text
+    assert client.post(path + "/repositories", data={"repository_urls": ""}).status_code == 422

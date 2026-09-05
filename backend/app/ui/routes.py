@@ -3,7 +3,7 @@
 from typing import Any
 from uuid import UUID
 
-from flask import Blueprint, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, make_response, redirect, render_template, request, url_for
 from pydantic import ValidationError
 from werkzeug.wrappers import Response
 
@@ -20,6 +20,7 @@ from backend.app.schemas.work_items import (
     WorkItemListFilter,
     WorkItemUpdate,
 )
+from backend.app.services import github as github_service
 from backend.app.services import projects as project_service
 from backend.app.services import tags as tag_service
 from backend.app.services import work_items as work_item_service
@@ -99,11 +100,12 @@ def render_project_board(
     *,
     tag_error: str | None = None,
     project_error: str | None = None,
+    tab: str | None = None,
 ) -> str:
     """Render a board with its complete project tag vocabulary."""
     context = board_context(project_id)
-    active_tab: str = request.args.get("tab", "board")
-    if active_tab not in {"board", "activity"}:
+    active_tab: str = tab or request.args.get("tab", "board")
+    if active_tab not in {"board", "activity", "repository"}:
         active_tab = "board"
     activity: list[ActivityRow] = (
         project_service.list_project_activity(get_engine(), project_id)
@@ -117,6 +119,13 @@ def render_project_board(
         tag_error=tag_error,
         project_error=project_error,
         activity=activity,
+        repositories=(
+            github_service.project_repositories(
+                get_engine(), project_id, current_app.extensions["github_client"]
+            )
+            if active_tab == "repository"
+            else []
+        ),
     )
 
 
@@ -239,3 +248,19 @@ def form_with_tag_ids() -> dict[str, Any]:
             if criterion.strip()
         ]
     return payload
+
+
+@ui_blueprint.post("/ui/projects/<uuid:project_id>/repositories")
+def update_project_repositories(project_id: UUID) -> tuple[str, int] | Response:
+    """Save repository associations through the same project update use case."""
+    try:
+        urls = [
+            line.strip()
+            for line in request.form.get("repository_urls", "").splitlines()
+            if line.strip()
+        ]
+        command = ProjectUpdate(repository_urls=urls)
+        project_service.update_project(get_engine(), project_id, command)
+    except (ValidationError, AppError) as error:
+        return render_project_board(project_id, project_error=str(error), tab="repository"), 422
+    return redirect(url_for("ui.project_board", project_id=project_id, tab="repository"))

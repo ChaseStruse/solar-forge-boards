@@ -13,7 +13,12 @@ from backend.app.repositories import activity as activity_repository
 from backend.app.repositories import projects as project_repository
 from backend.app.schemas.projects import ProjectCreate, ProjectUpdate
 from backend.app.services import tags as tag_service
-from backend.app.services.common import require_active_project, require_version, transaction
+from backend.app.services.common import (
+    record_activity,
+    require_active_project,
+    require_version,
+    transaction,
+)
 
 
 def create_project(engine: Engine | Connection, command: ProjectCreate) -> ProjectRow:
@@ -27,10 +32,11 @@ def create_project(engine: Engine | Connection, command: ProjectCreate) -> Proje
                     "id": project_id,
                     "name": command.name,
                     "description": command.description,
+                    "repository_urls": command.repository_urls,
                 },
             )
             tag_service.create_default_tags(connection, project_id)
-            activity_repository.create_activity_event(
+            record_activity(
                 connection,
                 {
                     "id": uuid4(),
@@ -80,10 +86,10 @@ def update_project(
             require_version(existing["version"], expected_version)
             require_active_project(existing)
             changes: dict[str, Any] = {}
-            event_changes: dict[str, dict[str, str]] = {}
-            for field_name in ("name", "description"):
-                new_value: str | None = getattr(command, field_name)
-                old_value: str = existing[field_name]
+            event_changes: dict[str, dict[str, Any]] = {}
+            for field_name in ("name", "description", "repository_urls"):
+                new_value: Any = getattr(command, field_name)
+                old_value: Any = existing[field_name]
                 if new_value is not None and new_value != old_value:
                     changes[field_name] = new_value
                     event_changes[field_name] = {"from": old_value, "to": new_value}
@@ -98,7 +104,7 @@ def update_project(
                 if expected_version is not None:
                     raise version_conflict()
                 raise not_found("Project", str(project_id))
-            activity_repository.create_activity_event(
+            record_activity(
                 connection,
                 {
                     "id": uuid4(),
@@ -166,7 +172,7 @@ def set_project_archived(
             if expected_version is not None:
                 raise version_conflict()
             raise not_found("Project", str(project_id))
-        activity_repository.create_activity_event(
+        record_activity(
             connection,
             {
                 "id": uuid4(),
