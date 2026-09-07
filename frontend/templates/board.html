@@ -17,11 +17,12 @@
   {% elif active_tab == 'board' %}
   <details class="story-composer">
     <summary><span aria-hidden="true">＋</span> Forge a story</summary>
-    <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id, **board_query) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) { this.reset(); this.closest('details').removeAttribute('open'); }">
+    <form class="story-form" hx-post="{{ url_for('ui.create_work_item', project_id=project.id, **board_query) }}" hx-target="#board" hx-swap="outerHTML" hx-on::after-request="if (event.detail.xhr.status === 201) { this.reset(); this.closest('details').removeAttribute('open'); }">
       <div class="form-intro">
         <p class="eyebrow">New story</p>
         <h2>Shape the next piece of work</h2>
       </div>
+      <div class="edit-error" id="story-create-error" aria-live="polite"></div>
       <label>Title <input name="title" required maxlength="200" placeholder="What needs to happen?"></label>
       <label>Description <textarea name="description" maxlength="10000" rows="3" placeholder="The user need, context, and intended outcome…"></textarea></label>
       <label>Technical description <textarea name="technical_description" maxlength="20000" rows="4" placeholder="Implementation notes, constraints, APIs, or acceptance details…"></textarea></label>

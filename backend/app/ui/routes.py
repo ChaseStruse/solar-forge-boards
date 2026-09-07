@@ -130,13 +130,18 @@ def render_project_board(
 
 
 @ui_blueprint.post("/ui/projects/<uuid:project_id>/work-items")
-def create_work_item(project_id: UUID) -> tuple[str, int]:
+def create_work_item(project_id: UUID) -> tuple[str, int] | Response:
     """Create a card and return a refreshed board fragment."""
     try:
         command: WorkItemCreate = WorkItemCreate.model_validate(form_with_tag_ids())
         work_item_service.create_work_item(get_engine(), project_id, command)
     except (ValidationError, AppError) as error:
-        return render_template("partials/form_error.html", message=str(error)), 422
+        response: Response = make_response(
+            render_template("partials/form_error.html", message=str(error)), 422
+        )
+        response.headers["HX-Retarget"] = "#story-create-error"
+        response.headers["HX-Reswap"] = "innerHTML"
+        return response
     return render_board_fragment(project_id), 201
 
 
