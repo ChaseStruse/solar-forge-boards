@@ -133,6 +133,27 @@ def test_htmx_edit_error_stays_inside_open_editor(client: FlaskClient, work_item
     assert b"Repository link must be a complete" in response.data
 
 
+def test_htmx_create_error_stays_inside_story_composer(
+    client: FlaskClient, project_id: str
+) -> None:
+    """Invalid story creation returns a message that HTMX can swap into the composer."""
+    response = client.post(
+        f"/ui/projects/{project_id}/work-items",
+        data={"title": "Invalid repository", "repository_url": "javascript:alert(1)"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 422
+    assert response.headers["HX-Retarget"] == "#story-create-error"
+    assert response.headers["HX-Reswap"] == "innerHTML"
+    assert b"Repository link must be a complete" in response.data
+
+    board = client.get(f"/ui/projects/{project_id}")
+    assert b'id="story-create-error"' in board.data
+    assert b"hx-on::before-swap" in board.data
+    assert b".story-form, .edit-story-form" in board.data
+    assert b"event.detail.xhr.status === 201" in board.data
+
+
 def test_htmx_delete_story_refreshes_board(client: FlaskClient, work_item_id: str) -> None:
     """Confirmed story deletion removes its card from the refreshed board."""
     response = client.post(
