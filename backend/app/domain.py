@@ -6,6 +6,7 @@ from enum import StrEnum
 class WorkItemStatus(StrEnum):
     """Lifecycle states for a work item."""
 
+    BACKLOG = "backlog"
     TODO = "todo"
     IN_PROGRESS = "in_progress"
     BLOCKED = "blocked"
@@ -14,8 +15,10 @@ class WorkItemStatus(StrEnum):
 
 
 ALLOWED_TRANSITIONS: dict[WorkItemStatus, frozenset[WorkItemStatus]] = {
+    WorkItemStatus.BACKLOG: frozenset({WorkItemStatus.TODO, WorkItemStatus.CANCELLED}),
     WorkItemStatus.TODO: frozenset(
         {
+            WorkItemStatus.BACKLOG,
             WorkItemStatus.IN_PROGRESS,
             WorkItemStatus.BLOCKED,
             WorkItemStatus.DONE,

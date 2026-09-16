@@ -121,6 +121,7 @@ not implemented.
   "title": "Publish tool schema",
   "description": "Describe project and work-item operations",
   "technical_description": "Publish an OpenAPI document from the service schemas.",
+  "points": 5,
   "repository_url": "https://github.com/example/solar-forge",
   "tag_ids": ["2cf9017b-d9f7-4912-a9aa-2e6bec730954"]
 }
@@ -133,6 +134,7 @@ Returns `201`. New work items begin in `todo`. Field limits are:
 | `title` | Required, trimmed, 1–200 characters |
 | `description` | Optional, up to 10,000 characters |
 | `technical_description` | Optional, up to 20,000 characters |
+| `points` | Optional estimate: `1`, `3`, `5`, `8`, or `13`; `null` means unestimated |
 | `repository_url` | Optional, up to 2,048 characters, complete HTTP(S) URL |
 | `acceptance_criteria` | Optional ordered list of up to 100 nonblank items, each up to 500 characters |
 | `tag_ids` | Optional, at most 20 unique UUIDs belonging to this project |
@@ -178,10 +180,11 @@ deleted or no longer matches the filters, restart traversal after `422 invalid_c
 - `PATCH /api/v1/work-items/{work_item_id}`
 - `DELETE /api/v1/work-items/{work_item_id}`
 
-`PATCH` requires at least one of `title`, `description`, `technical_description`, `repository_url`,
-`acceptance_criteria`, or `tag_ids`. Only supplied properties are changed. Supplying an empty
-`acceptance_criteria` or `tag_ids` array clears that collection; omitting it preserves the value.
-`status` is intentionally rejected so lifecycle rules cannot be bypassed.
+`PATCH` requires at least one of `title`, `description`, `technical_description`, `points`,
+`repository_url`, `acceptance_criteria`, or `tag_ids`. Only supplied properties are changed.
+Supplying `null` for `points` clears the estimate. Supplying an empty `acceptance_criteria` or
+`tag_ids` array clears that collection; omitting a property preserves its value. `status` is
+intentionally rejected so lifecycle rules cannot be bypassed.
 
 Delete returns `204` with an empty body. It permanently removes the story. Existing activity events
 remain attached to the project with a null `work_item_id`, and a final `work_item.deleted` event
@@ -201,7 +204,8 @@ Statuses and allowed destinations are:
 
 | Current status | Allowed targets |
 | --- | --- |
-| `todo` | `in_progress`, `blocked`, `done`, `cancelled` |
+| `backlog` | `todo`, `cancelled` |
+| `todo` | `backlog`, `in_progress`, `blocked`, `done`, `cancelled` |
 | `in_progress` | `todo`, `blocked`, `done`, `cancelled` |
 | `blocked` | `todo`, `in_progress`, `done`, `cancelled` |
 | `done` | `in_progress` |
@@ -213,16 +217,24 @@ Requesting the current status is an idempotent no-op. An invalid change returns
 
 ### Move priority
 
-`POST /api/v1/work-items/{work_item_id}/priority` moves a story one position within its current
-workflow lane:
+`POST /api/v1/work-items/{work_item_id}/priority` moves a story within its current workflow lane.
+For an adjacent move, send:
 
 ```json
 {"direction": "up"}
 ```
 
-`direction` is `up` or `down`. Moving beyond the first or last story is an idempotent no-op. A
-successful swap emits `work_item.priority_changed`. Moving a story to another status places it at
-the end of the destination lane's priority order.
+`direction` is `up` or `down`. Moving beyond the first or last story is an idempotent no-op. To place
+a story directly before another story in the same lane, send its UUID:
+
+```json
+{"before_work_item_id": "4aa3eb4c-1671-4f88-b44f-18319b5c5654"}
+```
+
+Send `{"before_work_item_id": null}` to place it at the end. Supply exactly one of `direction` or
+`before_work_item_id`. A target outside the story's current lane returns
+`422 invalid_priority_target`. A successful reorder emits `work_item.priority_changed`. Moving a
+story to another status places it at the end of the destination lane's priority order.
 
 ## Activity
 

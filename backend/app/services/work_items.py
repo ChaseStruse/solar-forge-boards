@@ -62,6 +62,7 @@ def create_work_item(
                     else next(iter(project["repository_urls"]), "")
                 ),
                 "acceptance_criteria": command.acceptance_criteria,
+                "points": command.points,
                 "status": WorkItemStatus.TODO.value,
                 "priority": work_item_repository.next_priority(
                     connection, project_id, WorkItemStatus.TODO.value
@@ -83,6 +84,7 @@ def create_work_item(
                     "status": WorkItemStatus.TODO.value,
                     "tags": [tag["name"] for tag in selected_tags],
                     "acceptance_criteria": command.acceptance_criteria,
+                    "points": command.points,
                 },
             },
         )
@@ -262,6 +264,12 @@ def update_work_item(
                 changes[field_name] = new_value
                 event_changes[field_name] = {"from": old_value, "to": new_value}
 
+        if "points" in command.model_fields_set and command.points != existing["points"]:
+            changes["points"] = command.points
+            old_points: Any = existing["points"]
+            new_points: Any = command.points
+            event_changes["points"] = {"from": old_points, "to": new_points}
+
         existing_tags: list[TagRow] = enrich_work_items(connection, [existing])[0]["tags"]
         selected_tags: list[TagRow] = existing_tags
         tags_changed: bool = False
@@ -366,7 +374,7 @@ def move_work_item_priority(
     *,
     expected_version: int | None = None,
 ) -> WorkItemWithTagsRow:
-    """Swap a story with its adjacent priority peer in the current workflow lane."""
+    """Move a story to an adjacent or explicit position in its workflow lane."""
     with transaction(engine) as connection:
         existing: WorkItemRow | None = work_item_repository.get_work_item(connection, work_item_id)
         if existing is None:
@@ -379,34 +387,66 @@ def move_work_item_priority(
         index: int = next(
             position for position, item in enumerate(lane_items) if item["id"] == work_item_id
         )
-        target_index: int = index - 1 if command.direction == "up" else index + 1
+        if "direction" in command.model_fields_set:
+            target_index: int = index - 1 if command.direction == "up" else index + 1
+        elif command.before_work_item_id is None:
+            target_index = len(lane_items) - 1
+        else:
+            target_index = next(
+                (
+                    position
+                    for position, item in enumerate(lane_items)
+                    if item["id"] == command.before_work_item_id
+                ),
+                -1,
+            )
+            if target_index < 0:
+                raise AppError(
+                    "invalid_priority_target",
+                    "The priority target must be another story in the same lane.",
+                    422,
+                )
+            if target_index > index:
+                target_index -= 1
         if target_index < 0 or target_index >= len(lane_items):
             return enrich_work_items(connection, [existing])[0]
-        neighbor: WorkItemRow = lane_items[target_index]
+        reordered: list[WorkItemRow] = [item for item in lane_items if item["id"] != work_item_id]
+        reordered.insert(target_index, existing)
+        if [item["id"] for item in reordered] == [item["id"] for item in lane_items]:
+            return enrich_work_items(connection, [existing])[0]
         now: datetime = datetime.now(UTC)
-        moved: WorkItemRow | None = work_item_repository.update_work_item(
-            connection,
-            work_item_id,
-            {
-                "priority": neighbor["priority"],
-                "updated_at": now,
-                "version": existing["version"] + 1,
-            },
-            expected_version=expected_version,
-        )
-        work_item_repository.update_work_item(
-            connection,
-            neighbor["id"],
-            {
-                "priority": existing["priority"],
-                "updated_at": now,
-                "version": neighbor["version"] + 1,
-            },
-        )
+        moved: WorkItemRow | None = None
+        for priority, item in enumerate(reordered, start=1):
+            if item["priority"] == priority and item["id"] != work_item_id:
+                continue
+            updated: WorkItemRow | None = work_item_repository.update_work_item(
+                connection,
+                item["id"],
+                {
+                    "priority": priority,
+                    "updated_at": now,
+                    "version": item["version"] + 1,
+                },
+                expected_version=expected_version if item["id"] == work_item_id else None,
+            )
+            if item["id"] == work_item_id:
+                moved = updated
         if moved is None:
             if expected_version is not None:
                 raise version_conflict()
             raise not_found("Work item", str(work_item_id))
+        activity_details: dict[str, Any] = {
+            "from": existing["priority"],
+            "to": moved["priority"],
+        }
+        if "direction" in command.model_fields_set:
+            activity_details["direction"] = command.direction
+        else:
+            activity_details["before_work_item_id"] = (
+                str(command.before_work_item_id)
+                if command.before_work_item_id is not None
+                else None
+            )
         record_activity(
             connection,
             {
@@ -414,11 +454,7 @@ def move_work_item_priority(
                 "project_id": existing["project_id"],
                 "work_item_id": work_item_id,
                 "event_type": "work_item.priority_changed",
-                "details": {
-                    "direction": command.direction,
-                    "from": existing["priority"],
-                    "to": neighbor["priority"],
-                },
+                "details": activity_details,
             },
         )
         return enrich_work_items(connection, [moved])[0]

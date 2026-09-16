@@ -62,12 +62,17 @@ work_items: Table = Table(
     Column("acceptance_criteria", JSON, nullable=False, server_default="[]"),
     Column("status", String(32), nullable=False, server_default="todo"),
     Column("priority", Integer, nullable=False, server_default="1"),
+    Column("points", Integer, nullable=True),
     Column("version", Integer, nullable=False, server_default="1"),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     CheckConstraint(
-        "status IN ('todo', 'in_progress', 'blocked', 'done', 'cancelled')",
+        "status IN ('backlog', 'todo', 'in_progress', 'blocked', 'done', 'cancelled')",
         name="ck_work_items_status",
+    ),
+    CheckConstraint(
+        "points IS NULL OR points IN (1, 3, 5, 8, 13)",
+        name="ck_work_items_points",
     ),
 )
 Index("ix_work_items_project_status", work_items.c.project_id, work_items.c.status)
@@ -169,6 +174,7 @@ class WorkItemRow(TypedDict):
     acceptance_criteria: list[str]
     status: str
     priority: int
+    points: int | None
     version: int
     created_at: datetime
     updated_at: datetime

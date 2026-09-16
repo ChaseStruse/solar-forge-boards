@@ -38,7 +38,8 @@ layer.
 
 `backend/app/models.py` defines SQLAlchemy Core metadata. Alembic revisions under
 `backend/migrations/` are the production schema history. PostgreSQL enforces identifiers,
-relationships, uniqueness, and valid status values.
+relationships, uniqueness, valid status values, and the optional 1, 3, 5, 8, or 13 story-point
+scale.
 
 The primary relationships are:
 
@@ -66,7 +67,8 @@ Work items begin in `todo`. Transitions are explicit commands rather than generi
 
 | Current status | Allowed targets |
 | --- | --- |
-| `todo` | `in_progress`, `blocked`, `done`, `cancelled` |
+| `backlog` | `todo`, `cancelled` |
+| `todo` | `backlog`, `in_progress`, `blocked`, `done`, `cancelled` |
 | `in_progress` | `todo`, `blocked`, `done`, `cancelled` |
 | `blocked` | `todo`, `in_progress`, `done`, `cancelled` |
 | `done` | `in_progress` |
@@ -75,9 +77,15 @@ Work items begin in `todo`. Transitions are explicit commands rather than generi
 `PATCH /work-items/{id}` cannot alter status, so every lifecycle change passes through the
 transition policy and produces an event.
 
-Each workflow lane has a persisted story priority order. A priority command swaps a story with its
-adjacent lane peer in one transaction and records an activity event. Transitioning a story places it
-at the end of the destination lane, avoiding ambiguous cross-lane priority comparisons.
+New stories still begin in `todo`. Backlog is an explicit holding state for work that is not ready;
+it must return through `todo` before entering active work. The browser hides the backlog lane in its
+default Board preset, while the API always returns backlog stories unless callers filter them after
+retrieval.
+
+Each workflow lane has a persisted story priority order. A priority command can swap a story with an
+adjacent lane peer or place it directly before another story; the service renumbers the affected lane
+positions in one transaction and records an activity event. Transitioning a story places it at the
+end of the destination lane, avoiding ambiguous cross-lane priority comparisons.
 
 Activity events are append-only application facts. A service records a meaningful write and its
 event in the same database transaction. Deleting a story preserves its earlier events and adds a

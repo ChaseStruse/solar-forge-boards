@@ -6,10 +6,13 @@ transitions, project-scoped tags, and an immutable activity trail.
 
 ## Features
 
-- Create projects and organize stories across Todo, In Progress, Blocked, Done, and Cancelled lanes.
-- Open and edit a story's title, description, technical description, repository link, and tags.
-- Set story priority within a workflow lane using persistent up/down ordering controls.
-- Move stories by dragging cards or by using the accessible movement buttons in the story editor.
+- Create projects and organize stories across Backlog, Todo, In Progress, Blocked, Done, and
+  Cancelled lanes; the normal board hides unready backlog stories.
+- Open and edit a story's title, Fibonacci estimate, description, technical description, repository
+  link, and tags.
+- Set story priority within a workflow lane by dragging cards into the desired vertical order.
+- Move stories between lanes by dragging cards or by using the accessible movement buttons in the
+  story editor.
 - Delete stories with confirmation while retaining their project activity history.
 - Start every project with Business, Coding, Configuration, and Spike tags, then add custom tags.
 - Filter cards by one or more tags; multiple selected tags use OR matching.

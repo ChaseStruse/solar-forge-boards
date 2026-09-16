@@ -31,12 +31,16 @@ def test_projects_page_and_board_render(client: FlaskClient, project_id: str) ->
     assert b"Customize" in board.data
     assert b"Create a project tag" in board.data
     assert b"Board view" in board.data
+    assert b">Board<" in board.data
+    assert b">Backlog<" in board.data
     assert b"All lanes" in board.data
     assert b"Work queue" in board.data
     assert b"Focus" in board.data
     assert b"Delivery" in board.data
     assert b"Visible lanes" in board.data
     assert f'data-project-id="{project_id}"'.encode() in board.data
+    assert b'class="column column-backlog" data-status="backlog" hidden' in board.data
+    assert b'data-view-statuses="backlog"' in board.data
 
     activity = client.get(f"/ui/projects/{project_id}?tab=activity")
     assert activity.status_code == 200
@@ -56,6 +60,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
             "title": "HTMX card",
             "description": "A human-friendly explanation.",
             "technical_description": "A typed service boundary.",
+            "points": "8",
             "acceptance_criteria": "The card is visible.\nThe workflow is available.",
             "repository_url": "https://github.com/example/solar-forge",
             "tag_ids": coding_tag["id"],
@@ -67,14 +72,18 @@ def test_htmx_create_edit_and_transition_refresh_board(
     assert b"HTMX card" in created.data
     assert b"A human-friendly explanation." in created.data
     assert b"A typed service boundary." in created.data
+    assert b"8 pts" in created.data
+    assert b'name="points"' in created.data
     assert b"Open repository" in created.data
     assert b"Edit story" in created.data
     assert b"Save changes" in created.data
     assert b'draggable="true"' in created.data
     assert b'data-allowed-statuses="' in created.data
     assert b'class="drag-transition-form"' in created.data
-    assert b"Move HTMX card up" in created.data
-    assert b"Move HTMX card down" in created.data
+    assert b'class="drag-priority-form"' in created.data
+    assert b'name="before_work_item_id"' in created.data
+    assert b"Move HTMX card up" not in created.data
+    assert b"Move HTMX card down" not in created.data
     assert b"#1" in created.data
     assert b"Drag the card to another lane" in created.data
     assert b'<select name="status"' not in created.data
@@ -92,6 +101,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
             "title": "Edited HTMX card",
             "description": "A clearer human-friendly explanation.",
             "technical_description": "An updated typed service boundary.",
+            "points": "13",
             "repository_url": "https://github.com/example/solar-forge-boards",
             "tag_ids": coding_tag["id"],
         },
@@ -104,6 +114,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
 
     fetched = client.get(f"/api/v1/work-items/{item_id}").get_json()["data"]
     assert fetched["title"] == "Edited HTMX card"
+    assert fetched["points"] == 13
     assert fetched["repository_url"] == "https://github.com/example/solar-forge-boards"
 
     moved = client.post(
@@ -113,6 +124,43 @@ def test_htmx_create_edit_and_transition_refresh_board(
     )
     assert moved.status_code == 200
     assert b"Edited HTMX card" in moved.data
+
+
+def test_htmx_drag_priority_places_story_before_target(
+    client: FlaskClient, project_id: str
+) -> None:
+    """The hidden drag form can persist an exact within-lane insertion point."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    first = client.post(collection, json={"title": "First"}).get_json()["data"]
+    second = client.post(collection, json={"title": "Second"}).get_json()["data"]
+
+    response = client.post(
+        f"/ui/work-items/{second['id']}/priority",
+        data={"before_work_item_id": first["id"]},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert html.index("Second") < html.index("First")
+
+
+def test_htmx_backlog_transition_moves_story_into_hidden_lane(
+    client: FlaskClient, work_item_id: str
+) -> None:
+    """Moving an unready story to Backlog returns it inside the hidden backlog area."""
+    response = client.post(
+        f"/ui/work-items/{work_item_id}/transitions",
+        data={"status": "backlog"},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    backlog_start = html.index('data-status="backlog"')
+    todo_start = html.index('data-status="todo"')
+    assert "hidden" in html[backlog_start:todo_start]
+    assert "Connect agent" in html[backlog_start:todo_start]
 
 
 def test_htmx_edit_error_stays_inside_open_editor(client: FlaskClient, work_item_id: str) -> None:

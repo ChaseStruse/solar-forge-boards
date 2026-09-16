@@ -11,6 +11,17 @@ from backend.app.domain import WorkItemStatus
 from backend.app.schemas.common import ApiModel
 from backend.app.schemas.tags import TagRead
 
+StoryPoints = Literal[1, 3, 5, 8, 13]
+
+
+def normalize_points(value: object) -> object:
+    """Normalize optional HTML select values before applying the point scale."""
+    if value == "":
+        return None
+    if isinstance(value, str) and value.isdecimal():
+        return int(value)
+    return value
+
 
 def strip_title(value: str) -> str:
     """Reject blank titles and normalize outer whitespace."""
@@ -54,6 +65,7 @@ class WorkItemCreate(ApiModel):
     technical_description: str = Field(default="", max_length=20000)
     repository_url: str = Field(default="", max_length=2048)
     acceptance_criteria: list[str] = Field(default_factory=list, max_length=100)
+    points: StoryPoints | None = None
     tag_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
     _strip_title = field_validator("title")(strip_title)
@@ -66,6 +78,8 @@ class WorkItemCreate(ApiModel):
         normalize_acceptance_criteria
     )
 
+    _normalize_points = field_validator("points", mode="before")(normalize_points)
+
 
 class WorkItemUpdate(ApiModel):
     """Partial input for editing work-item content."""
@@ -75,7 +89,10 @@ class WorkItemUpdate(ApiModel):
     technical_description: str | None = Field(default=None, max_length=20000)
     repository_url: str | None = Field(default=None, max_length=2048)
     acceptance_criteria: list[str] | None = Field(default=None, max_length=100)
+    points: StoryPoints | None = None
     tag_ids: list[UUID] | None = Field(default=None, max_length=20)
+
+    _normalize_points = field_validator("points", mode="before")(normalize_points)
 
     @field_validator("title")
     @classmethod
@@ -108,7 +125,7 @@ class WorkItemUpdate(ApiModel):
     @model_validator(mode="after")
     def ensure_update_present(self) -> WorkItemUpdate:
         """Require at least one editable field."""
-        if all(
+        if "points" not in self.model_fields_set and all(
             value is None
             for value in (
                 self.title,
@@ -132,7 +149,26 @@ class StatusTransition(ApiModel):
 class PriorityMove(ApiModel):
     """Input for moving a story within its current workflow lane."""
 
-    direction: Literal["up", "down"]
+    direction: Literal["up", "down"] | None = None
+    before_work_item_id: UUID | None = None
+
+    @field_validator("before_work_item_id", mode="before")
+    @classmethod
+    def blank_before_work_item_id(cls, value: object) -> object:
+        """Treat a blank form value as a request to move to the lane's end."""
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def require_one_move_style(self) -> PriorityMove:
+        """Accept either an adjacent move or one explicit insertion position."""
+        supplied: int = sum(
+            field in self.model_fields_set for field in ("direction", "before_work_item_id")
+        )
+        if supplied != 1:
+            raise ValueError("Supply either direction or before_work_item_id, but not both.")
+        if "direction" in self.model_fields_set and self.direction is None:
+            raise ValueError("direction must be up or down.")
+        return self
 
 
 class WorkItemListFilter(ApiModel):
@@ -176,6 +212,7 @@ class WorkItemRead(ApiModel):
     tags: list[TagRead]
     status: WorkItemStatus
     priority: int
+    points: StoryPoints | None
     version: int
     created_at: datetime
     updated_at: datetime

@@ -17,6 +17,7 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
             "description": "End to end",
             "technical_description": "Expose a POST endpoint and persist the result.",
             "repository_url": "https://github.com/example/solar-forge",
+            "points": 5,
         },
     )
     assert created.status_code == 201
@@ -26,6 +27,7 @@ def test_create_list_and_get_work_item(client: FlaskClient, project_id: str) -> 
     assert item["technical_description"] == "Expose a POST endpoint and persist the result."
     assert item["repository_url"] == "https://github.com/example/solar-forge"
     assert item["acceptance_criteria"] == []
+    assert item["points"] == 5
     assert item["status"] == "todo"
 
     listed = client.get(f"/api/v1/projects/{project_id}/work-items")
@@ -126,6 +128,30 @@ def test_work_item_acceptance_criteria_search_and_sort(
         json={"title": "Bad criteria", "acceptance_criteria": [" "]},
     )
     assert invalid.status_code == 422
+
+
+@pytest.mark.parametrize("points", [0, 2, 4, 21])
+def test_story_points_reject_values_outside_the_estimation_scale(
+    client: FlaskClient, project_id: str, points: int
+) -> None:
+    """Only the board's selected Fibonacci estimates are accepted."""
+    response = client.post(
+        f"/api/v1/projects/{project_id}/work-items",
+        json={"title": "Invalid estimate", "points": points},
+    )
+
+    assert response.status_code == 422
+
+
+def test_story_points_can_be_updated_and_cleared(client: FlaskClient, work_item_id: str) -> None:
+    """An estimate is optional and can be replaced or returned to unestimated."""
+    estimated = client.patch(f"/api/v1/work-items/{work_item_id}", json={"points": 13})
+    assert estimated.status_code == 200
+    assert estimated.get_json()["data"]["points"] == 13
+
+    cleared = client.patch(f"/api/v1/work-items/{work_item_id}", json={"points": None})
+    assert cleared.status_code == 200
+    assert cleared.get_json()["data"]["points"] is None
 
 
 def test_work_item_cursor_pagination_keeps_the_collection_query(
@@ -275,6 +301,29 @@ def test_todo_story_can_be_completed_directly(client: FlaskClient, work_item_id:
     assert response.get_json()["data"]["status"] == "done"
 
 
+def test_todo_story_can_be_hidden_in_backlog_and_restored(
+    client: FlaskClient, work_item_id: str
+) -> None:
+    """Backlog holds unready stories and only promotes them through Todo."""
+    backlogged = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "backlog"}
+    )
+    assert backlogged.status_code == 200
+    assert backlogged.get_json()["data"]["status"] == "backlog"
+
+    invalid = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "in_progress"}
+    )
+    assert invalid.status_code == 409
+    assert invalid.get_json()["error"]["code"] == "invalid_status_transition"
+
+    restored = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "todo"}
+    )
+    assert restored.status_code == 200
+    assert restored.get_json()["data"]["status"] == "todo"
+
+
 def test_priority_move_reorders_stories_within_their_lane(
     client: FlaskClient, project_id: str, work_item_id: str
 ) -> None:
@@ -296,6 +345,18 @@ def test_priority_move_reorders_stories_within_their_lane(
         third["id"],
         second["id"],
     ]
+
+    placed = client.post(
+        f"/api/v1/work-items/{second['id']}/priority",
+        json={"before_work_item_id": work_item_id},
+    )
+    assert placed.status_code == 200
+    reordered = client.get(f"/api/v1/projects/{project_id}/work-items?sort=priority")
+    assert [item["id"] for item in reordered.get_json()["data"]] == [
+        second["id"],
+        work_item_id,
+        third["id"],
+    ]
     event_types = {
         event["event_type"]
         for event in client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
@@ -307,6 +368,24 @@ def test_priority_move_reorders_stories_within_their_lane(
     )
     assert first_boundary.status_code == 200
     assert first_boundary.get_json()["data"]["priority"] == 1
+
+
+def test_priority_target_must_share_the_story_lane(
+    client: FlaskClient, project_id: str, work_item_id: str
+) -> None:
+    """Direct placement cannot use a story from another workflow lane as its target."""
+    target = client.post(
+        f"/api/v1/projects/{project_id}/work-items", json={"title": "Other lane"}
+    ).get_json()["data"]
+    client.post(f"/api/v1/work-items/{target['id']}/transitions", json={"status": "in_progress"})
+
+    response = client.post(
+        f"/api/v1/work-items/{work_item_id}/priority",
+        json={"before_work_item_id": target["id"]},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "invalid_priority_target"
 
 
 def test_invalid_status_transition_is_rejected(client: FlaskClient, work_item_id: str) -> None:

@@ -35,6 +35,7 @@ growth.
 - JSON operations are independent of HTML and visual layout.
 - Commands are small, typed, and explicit.
 - Status cannot be silently mutated through a generic update.
+- Backlog stories are returned by collection reads and must move through Todo before active work.
 - Activity events make meaningful changes inspectable.
 - Work-item responses embed complete, ordered tag objects for classification and routing.
 - Project-scoped tags prevent one project's vocabulary from leaking into another.
@@ -58,7 +59,8 @@ for interactive board clients.
 
 Use `description` for the user need, business rules, and desired outcome. Use
 `technical_description` for architecture, constraints, acceptance details, and implementation notes.
-Use `repository_url` only for a complete HTTP(S) link. Keeping these fields distinct makes retrieved
+Use optional `points` for the human estimate and send only 1, 3, 5, 8, 13, or `null`. Use
+`repository_url` only for a complete HTTP(S) link. Keeping these fields distinct makes retrieved
 context easier to route to the appropriate Solar Forge brain or specialist.
 
 ## Before production agent writes
