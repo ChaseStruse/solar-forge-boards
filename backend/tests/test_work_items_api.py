@@ -296,6 +296,18 @@ def test_priority_move_reorders_stories_within_their_lane(
         third["id"],
         second["id"],
     ]
+
+    placed = client.post(
+        f"/api/v1/work-items/{second['id']}/priority",
+        json={"before_work_item_id": work_item_id},
+    )
+    assert placed.status_code == 200
+    reordered = client.get(f"/api/v1/projects/{project_id}/work-items?sort=priority")
+    assert [item["id"] for item in reordered.get_json()["data"]] == [
+        second["id"],
+        work_item_id,
+        third["id"],
+    ]
     event_types = {
         event["event_type"]
         for event in client.get(f"/api/v1/projects/{project_id}/activity").get_json()["data"]
@@ -307,6 +319,24 @@ def test_priority_move_reorders_stories_within_their_lane(
     )
     assert first_boundary.status_code == 200
     assert first_boundary.get_json()["data"]["priority"] == 1
+
+
+def test_priority_target_must_share_the_story_lane(
+    client: FlaskClient, project_id: str, work_item_id: str
+) -> None:
+    """Direct placement cannot use a story from another workflow lane as its target."""
+    target = client.post(
+        f"/api/v1/projects/{project_id}/work-items", json={"title": "Other lane"}
+    ).get_json()["data"]
+    client.post(f"/api/v1/work-items/{target['id']}/transitions", json={"status": "in_progress"})
+
+    response = client.post(
+        f"/api/v1/work-items/{work_item_id}/priority",
+        json={"before_work_item_id": target["id"]},
+    )
+
+    assert response.status_code == 422
+    assert response.get_json()["error"]["code"] == "invalid_priority_target"
 
 
 def test_invalid_status_transition_is_rejected(client: FlaskClient, work_item_id: str) -> None:

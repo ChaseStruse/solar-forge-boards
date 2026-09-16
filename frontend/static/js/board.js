@@ -1,6 +1,7 @@
 "use strict";
 
 let draggedCard = null;
+let dropIndicator = null;
 const selectedTagFilters = new Set();
 const allBoardStatuses = ["todo", "in_progress", "blocked", "done", "cancelled"];
 let visibleBoardStatuses = new Set(allBoardStatuses);
@@ -79,6 +80,48 @@ function allowedStatuses(card) {
   return new Set((card.dataset.allowedStatuses || "").split(",").filter(Boolean));
 }
 
+function usesPriorityOrder() {
+  return document.querySelector("#board")?.dataset.priorityOrder === "true";
+}
+
+function canDropInColumn(card, column) {
+  if (column.dataset.status === card.dataset.currentStatus) {
+    return usesPriorityOrder();
+  }
+  return allowedStatuses(card).has(column.dataset.status);
+}
+
+function cardAfterPointer(cards, pointerY) {
+  const candidates = [...cards.querySelectorAll(".work-card:not(.is-dragging)")].filter(
+    (card) => !card.hidden,
+  );
+  return candidates.reduce(
+    (closest, card) => {
+      const bounds = card.getBoundingClientRect();
+      const offset = pointerY - bounds.top - bounds.height / 2;
+      return offset < 0 && offset > closest.offset ? { offset, card } : closest;
+    },
+    { offset: Number.NEGATIVE_INFINITY, card: null },
+  ).card;
+}
+
+function showDropPosition(column, pointerY) {
+  if (!dropIndicator) {
+    dropIndicator = document.createElement("div");
+    dropIndicator.className = "drop-indicator";
+    dropIndicator.setAttribute("aria-hidden", "true");
+  }
+  const cards = column.querySelector(".cards");
+  const sameLane = column.dataset.status === draggedCard.dataset.currentStatus;
+  const followingCard = sameLane ? cardAfterPointer(cards, pointerY) : null;
+  if (followingCard) {
+    cards.insertBefore(dropIndicator, followingCard);
+    return;
+  }
+  const trailingMessage = cards.querySelector(".column-filter-empty, .column-empty");
+  cards.insertBefore(dropIndicator, trailingMessage);
+}
+
 function clearDragState() {
   document.querySelectorAll(".column").forEach((column) => {
     column.classList.remove("is-drop-allowed", "is-drop-target");
@@ -86,7 +129,11 @@ function clearDragState() {
   if (draggedCard) {
     draggedCard.classList.remove("is-dragging");
   }
+  if (dropIndicator) {
+    dropIndicator.remove();
+  }
   draggedCard = null;
+  dropIndicator = null;
   document.body.classList.remove("is-dragging-story");
 }
 
@@ -202,7 +249,10 @@ document.addEventListener("dragstart", (event) => {
   document.body.classList.add("is-dragging-story");
   const allowed = allowedStatuses(card);
   document.querySelectorAll(".column").forEach((column) => {
-    if (allowed.has(column.dataset.status)) {
+    if (
+      allowed.has(column.dataset.status) ||
+      (usesPriorityOrder() && column.dataset.status === card.dataset.currentStatus)
+    ) {
       column.classList.add("is-drop-allowed");
     }
   });
@@ -213,7 +263,7 @@ document.addEventListener("dragstart", (event) => {
 
 document.addEventListener("dragover", (event) => {
   const column = event.target.closest(".column");
-  if (!draggedCard || !column || !allowedStatuses(draggedCard).has(column.dataset.status)) {
+  if (!draggedCard || !column || !canDropInColumn(draggedCard, column)) {
     return;
   }
 
@@ -225,6 +275,7 @@ document.addEventListener("dragover", (event) => {
     }
   });
   column.classList.add("is-drop-target");
+  showDropPosition(column, event.clientY);
 });
 
 document.addEventListener("dragleave", (event) => {
@@ -237,16 +288,27 @@ document.addEventListener("dragleave", (event) => {
 document.addEventListener("drop", (event) => {
   const column = event.target.closest(".column");
   const card = draggedCard;
-  if (!card || !column || !allowedStatuses(card).has(column.dataset.status)) {
+  if (!card || !column || !canDropInColumn(card, column)) {
     clearDragState();
     return;
   }
 
   event.preventDefault();
-  const form = card.querySelector(".drag-transition-form");
-  const statusInput = form.querySelector('input[name="status"]');
-  statusInput.value = column.dataset.status;
-  form.requestSubmit();
+  if (column.dataset.status === card.dataset.currentStatus) {
+    let followingCard = dropIndicator?.nextElementSibling;
+    while (followingCard && !followingCard.matches(".work-card")) {
+      followingCard = followingCard.nextElementSibling;
+    }
+    const form = card.querySelector(".drag-priority-form");
+    const beforeInput = form.querySelector('input[name="before_work_item_id"]');
+    beforeInput.value = followingCard?.dataset.workItemId || "";
+    form.requestSubmit();
+  } else {
+    const form = card.querySelector(".drag-transition-form");
+    const statusInput = form.querySelector('input[name="status"]');
+    statusInput.value = column.dataset.status;
+    form.requestSubmit();
+  }
   clearDragState();
 });
 

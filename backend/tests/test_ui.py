@@ -73,8 +73,10 @@ def test_htmx_create_edit_and_transition_refresh_board(
     assert b'draggable="true"' in created.data
     assert b'data-allowed-statuses="' in created.data
     assert b'class="drag-transition-form"' in created.data
-    assert b"Move HTMX card up" in created.data
-    assert b"Move HTMX card down" in created.data
+    assert b'class="drag-priority-form"' in created.data
+    assert b'name="before_work_item_id"' in created.data
+    assert b"Move HTMX card up" not in created.data
+    assert b"Move HTMX card down" not in created.data
     assert b"#1" in created.data
     assert b"Drag the card to another lane" in created.data
     assert b'<select name="status"' not in created.data
@@ -113,6 +115,25 @@ def test_htmx_create_edit_and_transition_refresh_board(
     )
     assert moved.status_code == 200
     assert b"Edited HTMX card" in moved.data
+
+
+def test_htmx_drag_priority_places_story_before_target(
+    client: FlaskClient, project_id: str
+) -> None:
+    """The hidden drag form can persist an exact within-lane insertion point."""
+    collection = f"/api/v1/projects/{project_id}/work-items"
+    first = client.post(collection, json={"title": "First"}).get_json()["data"]
+    second = client.post(collection, json={"title": "Second"}).get_json()["data"]
+
+    response = client.post(
+        f"/ui/work-items/{second['id']}/priority",
+        data={"before_work_item_id": first["id"]},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert html.index("Second") < html.index("First")
 
 
 def test_htmx_edit_error_stays_inside_open_editor(client: FlaskClient, work_item_id: str) -> None:

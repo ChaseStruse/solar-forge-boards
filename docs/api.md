@@ -213,16 +213,24 @@ Requesting the current status is an idempotent no-op. An invalid change returns
 
 ### Move priority
 
-`POST /api/v1/work-items/{work_item_id}/priority` moves a story one position within its current
-workflow lane:
+`POST /api/v1/work-items/{work_item_id}/priority` moves a story within its current workflow lane.
+For an adjacent move, send:
 
 ```json
 {"direction": "up"}
 ```
 
-`direction` is `up` or `down`. Moving beyond the first or last story is an idempotent no-op. A
-successful swap emits `work_item.priority_changed`. Moving a story to another status places it at
-the end of the destination lane's priority order.
+`direction` is `up` or `down`. Moving beyond the first or last story is an idempotent no-op. To place
+a story directly before another story in the same lane, send its UUID:
+
+```json
+{"before_work_item_id": "4aa3eb4c-1671-4f88-b44f-18319b5c5654"}
+```
+
+Send `{"before_work_item_id": null}` to place it at the end. Supply exactly one of `direction` or
+`before_work_item_id`. A target outside the story's current lane returns
+`422 invalid_priority_target`. A successful reorder emits `work_item.priority_changed`. Moving a
+story to another status places it at the end of the destination lane's priority order.
 
 ## Activity
 

@@ -132,7 +132,26 @@ class StatusTransition(ApiModel):
 class PriorityMove(ApiModel):
     """Input for moving a story within its current workflow lane."""
 
-    direction: Literal["up", "down"]
+    direction: Literal["up", "down"] | None = None
+    before_work_item_id: UUID | None = None
+
+    @field_validator("before_work_item_id", mode="before")
+    @classmethod
+    def blank_before_work_item_id(cls, value: object) -> object:
+        """Treat a blank form value as a request to move to the lane's end."""
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def require_one_move_style(self) -> PriorityMove:
+        """Accept either an adjacent move or one explicit insertion position."""
+        supplied: int = sum(
+            field in self.model_fields_set for field in ("direction", "before_work_item_id")
+        )
+        if supplied != 1:
+            raise ValueError("Supply either direction or before_work_item_id, but not both.")
+        if "direction" in self.model_fields_set and self.direction is None:
+            raise ValueError("direction must be up or down.")
+        return self
 
 
 class WorkItemListFilter(ApiModel):

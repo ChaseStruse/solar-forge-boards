@@ -54,9 +54,10 @@ project activity.
 
 ## Story priority
 
-Within each lane, stories are ordered by priority. Use the **up** and **down** arrow buttons on a
-card to swap it with the adjacent story. The first and last cards cannot move farther in their lane.
-Moving a story to another workflow lane places it at the end of that lane.
+Within each lane, stories are ordered by priority. In the default ascending **Priority** view, drag a
+card up or down and use the glowing insertion line to place it in the desired order. Other sort views
+show their selected field and do not accept within-lane priority drops. Moving a story to another
+workflow lane places it at the end of that lane.
 
 ## Tags and filtering
 
