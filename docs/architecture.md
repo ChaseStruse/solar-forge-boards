@@ -38,7 +38,8 @@ layer.
 
 `backend/app/models.py` defines SQLAlchemy Core metadata. Alembic revisions under
 `backend/migrations/` are the production schema history. PostgreSQL enforces identifiers,
-relationships, uniqueness, and valid status values.
+relationships, uniqueness, valid status values, and the optional 1, 3, 5, 8, or 13 story-point
+scale.
 
 The primary relationships are:
 

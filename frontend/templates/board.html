@@ -24,6 +24,7 @@
       </div>
       <div class="edit-error" id="story-create-error" aria-live="polite"></div>
       <label>Title <input name="title" required maxlength="200" placeholder="What needs to happen?"></label>
+      <label>Story points <select name="points"><option value="">Unestimated</option>{% for points in [1, 3, 5, 8, 13] %}<option value="{{ points }}">{{ points }}</option>{% endfor %}</select></label>
       <label>Description <textarea name="description" maxlength="10000" rows="3" placeholder="The user need, context, and intended outcome…"></textarea></label>
       <label>Technical description <textarea name="technical_description" maxlength="20000" rows="4" placeholder="Implementation notes, constraints, APIs, or acceptance details…"></textarea></label>
       <label>Acceptance criteria <textarea name="acceptance_criteria" rows="4" maxlength="50099" placeholder="One verifiable outcome per line"></textarea><span class="field-note">One clear, verifiable outcome per line.</span></label>

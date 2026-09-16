@@ -35,6 +35,11 @@ def test_postgres_outbox_migration_locks_and_commit_notifications(
         with engine.begin() as connection:
             connection.execute(projects.insert().values(id=preserved_id, name="Preserved"))
         command.upgrade(config, "head")
+        migrated = inspect(engine)
+        assert "points" in {column["name"] for column in migrated.get_columns("work_items")}
+        assert "ck_work_items_points" in {
+            constraint["name"] for constraint in migrated.get_check_constraints("work_items")
+        }
         with engine.connect() as connection:
             assert connection.execute(select(outbox_events)).first() is None
             assert connection.execute(select(projects.c.name)).scalar_one() == "Preserved"
@@ -68,6 +73,9 @@ def test_postgres_outbox_migration_locks_and_commit_notifications(
                 two.rollback()
         command.downgrade(config, "923c2fb8b1fc")
         assert "outbox_events" not in inspect(engine).get_table_names()
+        assert "points" not in {
+            column["name"] for column in inspect(engine).get_columns("work_items")
+        }
         with engine.connect() as connection:
             assert set(connection.execute(select(projects.c.name)).scalars()) == {
                 "Preserved",
@@ -75,6 +83,9 @@ def test_postgres_outbox_migration_locks_and_commit_notifications(
                 "Second",
             }
         command.upgrade(config, "head")
+        assert "ck_work_items_points" in {
+            constraint["name"] for constraint in inspect(engine).get_check_constraints("work_items")
+        }
         with engine.connect() as connection:
             assert connection.execute(select(outbox_events)).first() is None
     finally:

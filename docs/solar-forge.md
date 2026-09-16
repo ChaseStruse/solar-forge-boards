@@ -58,7 +58,8 @@ for interactive board clients.
 
 Use `description` for the user need, business rules, and desired outcome. Use
 `technical_description` for architecture, constraints, acceptance details, and implementation notes.
-Use `repository_url` only for a complete HTTP(S) link. Keeping these fields distinct makes retrieved
+Use optional `points` for the human estimate and send only 1, 3, 5, 8, 13, or `null`. Use
+`repository_url` only for a complete HTTP(S) link. Keeping these fields distinct makes retrieved
 context easier to route to the appropriate Solar Forge brain or specialist.
 
 ## Before production agent writes

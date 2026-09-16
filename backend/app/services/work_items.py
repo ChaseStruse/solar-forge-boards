@@ -62,6 +62,7 @@ def create_work_item(
                     else next(iter(project["repository_urls"]), "")
                 ),
                 "acceptance_criteria": command.acceptance_criteria,
+                "points": command.points,
                 "status": WorkItemStatus.TODO.value,
                 "priority": work_item_repository.next_priority(
                     connection, project_id, WorkItemStatus.TODO.value
@@ -83,6 +84,7 @@ def create_work_item(
                     "status": WorkItemStatus.TODO.value,
                     "tags": [tag["name"] for tag in selected_tags],
                     "acceptance_criteria": command.acceptance_criteria,
+                    "points": command.points,
                 },
             },
         )
@@ -261,6 +263,12 @@ def update_work_item(
             if new_value is not None and new_value != old_value:
                 changes[field_name] = new_value
                 event_changes[field_name] = {"from": old_value, "to": new_value}
+
+        if "points" in command.model_fields_set and command.points != existing["points"]:
+            changes["points"] = command.points
+            old_points: Any = existing["points"]
+            new_points: Any = command.points
+            event_changes["points"] = {"from": old_points, "to": new_points}
 
         existing_tags: list[TagRow] = enrich_work_items(connection, [existing])[0]["tags"]
         selected_tags: list[TagRow] = existing_tags

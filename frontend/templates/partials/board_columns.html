@@ -22,7 +22,10 @@
         data-tag-ids="{% for tag in item.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}"
       >
         <div class="card-accent" aria-hidden="true"></div>
-        <span class="story-reference">#{{ item.reference_number }}</span>
+        <div class="card-meta">
+          <span class="story-reference">#{{ item.reference_number }}</span>
+          {% if item.points is not none %}<span class="story-points" aria-label="{{ item.points }} story points">{{ item.points }} pt{{ '' if item.points == 1 else 's' }}</span>{% endif %}
+        </div>
         <button class="card-open" type="button" {% if project_archived %}disabled aria-label="Archived story: {{ item.title }}"{% else %}onclick="document.getElementById('story-dialog-{{ item.id }}').showModal()"{% endif %}>
           <span>{{ item.title }}</span>
         </button>
@@ -73,6 +76,7 @@
             <form class="edit-story-form" hx-post="{{ url_for('ui.update_work_item', work_item_id=item.id, **board_query) }}" hx-target="#board" hx-swap="outerHTML" hx-disabled-elt="find button">
               <div class="edit-error" id="edit-error-{{ item.id }}" aria-live="polite"></div>
               <label>Title <input name="title" required maxlength="200" value="{{ item.title }}"></label>
+              <label>Story points <select name="points"><option value="">Unestimated</option>{% for points in [1, 3, 5, 8, 13] %}<option value="{{ points }}" {% if item.points == points %}selected{% endif %}>{{ points }}</option>{% endfor %}</select></label>
               <label>Description <textarea name="description" maxlength="10000" rows="4">{{ item.description }}</textarea></label>
               <label>Technical description <textarea name="technical_description" maxlength="20000" rows="6">{{ item.technical_description }}</textarea></label>
               <label>Acceptance criteria <textarea name="acceptance_criteria" rows="5" maxlength="50099" placeholder="One verifiable outcome per line">{{ item.acceptance_criteria|join('\n') }}</textarea><span class="field-note">One clear, verifiable outcome per line.</span></label>

@@ -56,6 +56,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
             "title": "HTMX card",
             "description": "A human-friendly explanation.",
             "technical_description": "A typed service boundary.",
+            "points": "8",
             "acceptance_criteria": "The card is visible.\nThe workflow is available.",
             "repository_url": "https://github.com/example/solar-forge",
             "tag_ids": coding_tag["id"],
@@ -67,6 +68,8 @@ def test_htmx_create_edit_and_transition_refresh_board(
     assert b"HTMX card" in created.data
     assert b"A human-friendly explanation." in created.data
     assert b"A typed service boundary." in created.data
+    assert b"8 pts" in created.data
+    assert b'name="points"' in created.data
     assert b"Open repository" in created.data
     assert b"Edit story" in created.data
     assert b"Save changes" in created.data
@@ -94,6 +97,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
             "title": "Edited HTMX card",
             "description": "A clearer human-friendly explanation.",
             "technical_description": "An updated typed service boundary.",
+            "points": "13",
             "repository_url": "https://github.com/example/solar-forge-boards",
             "tag_ids": coding_tag["id"],
         },
@@ -106,6 +110,7 @@ def test_htmx_create_edit_and_transition_refresh_board(
 
     fetched = client.get(f"/api/v1/work-items/{item_id}").get_json()["data"]
     assert fetched["title"] == "Edited HTMX card"
+    assert fetched["points"] == 13
     assert fetched["repository_url"] == "https://github.com/example/solar-forge-boards"
 
     moved = client.post(
