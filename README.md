@@ -6,7 +6,8 @@ transitions, project-scoped tags, and an immutable activity trail.
 
 ## Features
 
-- Create projects and organize stories across Todo, In Progress, Blocked, Done, and Cancelled lanes.
+- Create projects and organize stories across Backlog, Todo, In Progress, Blocked, Done, and
+  Cancelled lanes; the normal board hides unready backlog stories.
 - Open and edit a story's title, Fibonacci estimate, description, technical description, repository
   link, and tags.
 - Set story priority within a workflow lane by dragging cards into the desired vertical order.

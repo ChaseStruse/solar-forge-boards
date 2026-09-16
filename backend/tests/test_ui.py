@@ -31,12 +31,16 @@ def test_projects_page_and_board_render(client: FlaskClient, project_id: str) ->
     assert b"Customize" in board.data
     assert b"Create a project tag" in board.data
     assert b"Board view" in board.data
+    assert b">Board<" in board.data
+    assert b">Backlog<" in board.data
     assert b"All lanes" in board.data
     assert b"Work queue" in board.data
     assert b"Focus" in board.data
     assert b"Delivery" in board.data
     assert b"Visible lanes" in board.data
     assert f'data-project-id="{project_id}"'.encode() in board.data
+    assert b'class="column column-backlog" data-status="backlog" hidden' in board.data
+    assert b'data-view-statuses="backlog"' in board.data
 
     activity = client.get(f"/ui/projects/{project_id}?tab=activity")
     assert activity.status_code == 200
@@ -139,6 +143,24 @@ def test_htmx_drag_priority_places_story_before_target(
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert html.index("Second") < html.index("First")
+
+
+def test_htmx_backlog_transition_moves_story_into_hidden_lane(
+    client: FlaskClient, work_item_id: str
+) -> None:
+    """Moving an unready story to Backlog returns it inside the hidden backlog area."""
+    response = client.post(
+        f"/ui/work-items/{work_item_id}/transitions",
+        data={"status": "backlog"},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    backlog_start = html.index('data-status="backlog"')
+    todo_start = html.index('data-status="todo"')
+    assert "hidden" in html[backlog_start:todo_start]
+    assert "Connect agent" in html[backlog_start:todo_start]
 
 
 def test_htmx_edit_error_stays_inside_open_editor(client: FlaskClient, work_item_id: str) -> None:

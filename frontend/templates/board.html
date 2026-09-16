@@ -59,7 +59,9 @@
   <div class="toolbar-section toolbar-views">
     <span class="toolbar-label">View</span>
     <div class="view-presets" role="group" aria-label="Board view presets">
-      <button class="view-preset" type="button" data-view-preset="all" data-view-statuses="todo,in_progress,blocked,done,cancelled" aria-pressed="true">All lanes</button>
+      <button class="view-preset" type="button" data-view-preset="board" data-view-statuses="todo,in_progress,blocked,done,cancelled" aria-pressed="true">Board</button>
+      <button class="view-preset" type="button" data-view-preset="backlog" data-view-statuses="backlog" aria-pressed="false">Backlog</button>
+      <button class="view-preset" type="button" data-view-preset="all" data-view-statuses="backlog,todo,in_progress,blocked,done,cancelled" aria-pressed="false">All lanes</button>
       <button class="view-preset" type="button" data-view-preset="work" data-view-statuses="todo,in_progress,blocked" aria-pressed="false">Work queue</button>
       <button class="view-preset" type="button" data-view-preset="focus" data-view-statuses="in_progress,blocked" aria-pressed="false">Focus</button>
       <button class="view-preset" type="button" data-view-preset="delivery" data-view-statuses="in_progress,done" aria-pressed="false">Delivery</button>
@@ -92,7 +94,7 @@
         </div>
         <div class="lane-toggles" role="group" aria-label="Show or hide board lanes">
           {% for status in statuses %}
-          <button class="lane-toggle lane-toggle-{{ status.value }}" type="button" data-lane-toggle="{{ status.value }}" aria-pressed="true">
+          <button class="lane-toggle lane-toggle-{{ status.value }}" type="button" data-lane-toggle="{{ status.value }}" aria-pressed="{{ 'false' if status.value == 'backlog' else 'true' }}">
             <span aria-hidden="true"></span>{{ status.value|replace('_', ' ')|title }}
           </button>
           {% endfor %}

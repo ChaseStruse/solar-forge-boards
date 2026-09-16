@@ -126,6 +126,13 @@ Migration `ed6678dffaac` adds the nullable `work_items.points` column with a dat
 5, 8, or 13. Apply it before using story estimates. Existing stories remain unestimated, and the
 downgrade removes only estimate data while preserving every story row.
 
+## Backlog migration
+
+Migration `528333d9d5d6` expands the existing work-item status constraint to include `backlog`; it
+does not rewrite existing stories. Its downgrade refuses to run while any story remains in Backlog,
+preventing those stories from being silently reassigned or deleted. Move them to Todo or Cancelled
+before an intentional downgrade.
+
 ## Reference counter migration
 
 Migration `20260905_0009` adds and seeds a durable story reference counter from existing rows.

@@ -204,7 +204,8 @@ Statuses and allowed destinations are:
 
 | Current status | Allowed targets |
 | --- | --- |
-| `todo` | `in_progress`, `blocked`, `done`, `cancelled` |
+| `backlog` | `todo`, `cancelled` |
+| `todo` | `backlog`, `in_progress`, `blocked`, `done`, `cancelled` |
 | `in_progress` | `todo`, `blocked`, `done`, `cancelled` |
 | `blocked` | `todo`, `in_progress`, `done`, `cancelled` |
 | `done` | `in_progress` |

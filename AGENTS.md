@@ -117,7 +117,8 @@ Allowed story transitions:
 
 | Current status | Allowed targets |
 | --- | --- |
-| `todo` | `in_progress`, `blocked`, `done`, `cancelled` |
+| `backlog` | `todo`, `cancelled` |
+| `todo` | `backlog`, `in_progress`, `blocked`, `done`, `cancelled` |
 | `in_progress` | `todo`, `blocked`, `done`, `cancelled` |
 | `blocked` | `todo`, `in_progress`, `done`, `cancelled` |
 | `done` | `in_progress` |
@@ -136,6 +137,7 @@ Requesting the current status is an idempotent no-op. Invalid transitions return
 - After an HTMX board swap, reapply browser-local filters and visible-lane state.
 - Tag filters are session-local and match any selected tag.
 - Lane visibility is stored per project in `localStorage`; at least one lane must remain visible.
+- Backlog is hidden by default and available through its preset, All lanes, or Customize.
 - Hidden lanes expand the remaining columns and must not mutate or delete their stories.
 - Keep repository links restricted to complete HTTP(S) URLs and render them with safe external-link
   attributes.

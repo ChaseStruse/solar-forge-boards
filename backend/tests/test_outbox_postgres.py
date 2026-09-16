@@ -10,10 +10,13 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, make_url, select, text
 
+from backend.app.domain import WorkItemStatus
 from backend.app.models import outbox_events, projects
 from backend.app.repositories import outbox as repository
 from backend.app.schemas.projects import ProjectCreate
+from backend.app.schemas.work_items import StatusTransition, WorkItemCreate
 from backend.app.services import projects as project_service
+from backend.app.services import work_items as work_item_service
 
 
 def test_postgres_outbox_migration_locks_and_commit_notifications(
@@ -40,6 +43,12 @@ def test_postgres_outbox_migration_locks_and_commit_notifications(
         assert "ck_work_items_points" in {
             constraint["name"] for constraint in migrated.get_check_constraints("work_items")
         }
+        status_constraint = next(
+            constraint
+            for constraint in migrated.get_check_constraints("work_items")
+            if constraint["name"] == "ck_work_items_status"
+        )
+        assert "backlog" in status_constraint["sqltext"]
         with engine.connect() as connection:
             assert connection.execute(select(outbox_events)).first() is None
             assert connection.execute(select(projects.c.name)).scalar_one() == "Preserved"
@@ -76,6 +85,12 @@ def test_postgres_outbox_migration_locks_and_commit_notifications(
         assert "points" not in {
             column["name"] for column in inspect(engine).get_columns("work_items")
         }
+        downgraded_status = next(
+            constraint
+            for constraint in inspect(engine).get_check_constraints("work_items")
+            if constraint["name"] == "ck_work_items_status"
+        )
+        assert "backlog" not in downgraded_status["sqltext"]
         with engine.connect() as connection:
             assert set(connection.execute(select(projects.c.name)).scalars()) == {
                 "Preserved",
@@ -86,7 +101,26 @@ def test_postgres_outbox_migration_locks_and_commit_notifications(
         assert "ck_work_items_points" in {
             constraint["name"] for constraint in inspect(engine).get_check_constraints("work_items")
         }
+        upgraded_status = next(
+            constraint
+            for constraint in inspect(engine).get_check_constraints("work_items")
+            if constraint["name"] == "ck_work_items_status"
+        )
+        assert "backlog" in upgraded_status["sqltext"]
         with engine.connect() as connection:
             assert connection.execute(select(outbox_events)).first() is None
+        backlog_story = work_item_service.create_work_item(
+            engine, preserved_id, WorkItemCreate(title="Preserve backlog")
+        )
+        work_item_service.transition_work_item(
+            engine, backlog_story["id"], StatusTransition(status=WorkItemStatus.BACKLOG)
+        )
+        with pytest.raises(
+            RuntimeError, match="Cannot remove backlog status while backlog stories exist"
+        ):
+            command.downgrade(config, "ed6678dffaac")
+        work_item_service.transition_work_item(
+            engine, backlog_story["id"], StatusTransition(status=WorkItemStatus.TODO)
+        )
     finally:
         engine.dispose()

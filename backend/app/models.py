@@ -67,7 +67,7 @@ work_items: Table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     CheckConstraint(
-        "status IN ('todo', 'in_progress', 'blocked', 'done', 'cancelled')",
+        "status IN ('backlog', 'todo', 'in_progress', 'blocked', 'done', 'cancelled')",
         name="ck_work_items_status",
     ),
     CheckConstraint(

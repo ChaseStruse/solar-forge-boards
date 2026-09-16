@@ -6,7 +6,7 @@
   aria-label="Project work items"
 >
   {% for status in statuses %}
-  <div class="column column-{{ status.value }}" data-status="{{ status.value }}">
+  <div class="column column-{{ status.value }}" data-status="{{ status.value }}" {% if status.value == 'backlog' %}hidden{% endif %}>
     <div class="column-heading">
       <h2>{{ status.value|replace('_', ' ')|title }}</h2>
       <span class="lane-count">{{ grouped_items[status]|length }}</span>

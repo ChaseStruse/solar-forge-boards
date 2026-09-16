@@ -3,8 +3,9 @@
 let draggedCard = null;
 let dropIndicator = null;
 const selectedTagFilters = new Set();
-const allBoardStatuses = ["todo", "in_progress", "blocked", "done", "cancelled"];
-let visibleBoardStatuses = new Set(allBoardStatuses);
+const allBoardStatuses = ["backlog", "todo", "in_progress", "blocked", "done", "cancelled"];
+const defaultBoardStatuses = ["todo", "in_progress", "blocked", "done", "cancelled"];
+let visibleBoardStatuses = new Set(defaultBoardStatuses);
 
 function boardViewStorageKey() {
   const controls = document.querySelector(".view-system");
@@ -27,7 +28,7 @@ function loadBoardView() {
       visibleBoardStatuses = new Set(valid);
     }
   } catch (_error) {
-    visibleBoardStatuses = new Set(allBoardStatuses);
+    visibleBoardStatuses = new Set(defaultBoardStatuses);
   }
 }
 

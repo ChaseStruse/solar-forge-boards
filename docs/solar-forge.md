@@ -35,6 +35,7 @@ growth.
 - JSON operations are independent of HTML and visual layout.
 - Commands are small, typed, and explicit.
 - Status cannot be silently mutated through a generic update.
+- Backlog stories are returned by collection reads and must move through Todo before active work.
 - Activity events make meaningful changes inspectable.
 - Work-item responses embed complete, ordered tag objects for classification and routing.
 - Project-scoped tags prevent one project's vocabulary from leaking into another.

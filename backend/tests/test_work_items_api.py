@@ -301,6 +301,29 @@ def test_todo_story_can_be_completed_directly(client: FlaskClient, work_item_id:
     assert response.get_json()["data"]["status"] == "done"
 
 
+def test_todo_story_can_be_hidden_in_backlog_and_restored(
+    client: FlaskClient, work_item_id: str
+) -> None:
+    """Backlog holds unready stories and only promotes them through Todo."""
+    backlogged = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "backlog"}
+    )
+    assert backlogged.status_code == 200
+    assert backlogged.get_json()["data"]["status"] == "backlog"
+
+    invalid = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "in_progress"}
+    )
+    assert invalid.status_code == 409
+    assert invalid.get_json()["error"]["code"] == "invalid_status_transition"
+
+    restored = client.post(
+        f"/api/v1/work-items/{work_item_id}/transitions", json={"status": "todo"}
+    )
+    assert restored.status_code == 200
+    assert restored.get_json()["data"]["status"] == "todo"
+
+
 def test_priority_move_reorders_stories_within_their_lane(
     client: FlaskClient, project_id: str, work_item_id: str
 ) -> None:

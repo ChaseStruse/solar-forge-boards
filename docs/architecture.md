@@ -67,7 +67,8 @@ Work items begin in `todo`. Transitions are explicit commands rather than generi
 
 | Current status | Allowed targets |
 | --- | --- |
-| `todo` | `in_progress`, `blocked`, `done`, `cancelled` |
+| `backlog` | `todo`, `cancelled` |
+| `todo` | `backlog`, `in_progress`, `blocked`, `done`, `cancelled` |
 | `in_progress` | `todo`, `blocked`, `done`, `cancelled` |
 | `blocked` | `todo`, `in_progress`, `done`, `cancelled` |
 | `done` | `in_progress` |
@@ -75,6 +76,11 @@ Work items begin in `todo`. Transitions are explicit commands rather than generi
 
 `PATCH /work-items/{id}` cannot alter status, so every lifecycle change passes through the
 transition policy and produces an event.
+
+New stories still begin in `todo`. Backlog is an explicit holding state for work that is not ready;
+it must return through `todo` before entering active work. The browser hides the backlog lane in its
+default Board preset, while the API always returns backlog stories unless callers filter them after
+retrieval.
 
 Each workflow lane has a persisted story priority order. A priority command can swap a story with an
 adjacent lane peer or place it directly before another story; the service renumbers the affected lane

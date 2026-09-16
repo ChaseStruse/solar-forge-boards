@@ -6,8 +6,8 @@ theme and is designed around projects containing story cards.
 ## Projects
 
 Create a project from the Projects page with a unique name and an optional description. Opening a
-project shows its five workflow lanes and creates no stories automatically. New projects receive the
-four default tags: Business, Coding, Configuration, and Spike.
+project shows its active workflow lanes and creates no stories automatically. New projects receive
+the four default tags: Business, Coding, Configuration, and Spike.
 
 Open **Customize** on a board to edit its name and description. You can also archive a project
 after confirming the action. Archiving preserves every story and activity event but makes the
@@ -45,14 +45,16 @@ Allowed destinations are:
 
 | Current lane | Allowed destinations |
 | --- | --- |
-| Todo | In Progress, Blocked, Done, Cancelled |
+| Backlog | Todo, Cancelled |
+| Todo | Backlog, In Progress, Blocked, Done, Cancelled |
 | In Progress | Todo, Blocked, Done, Cancelled |
 | Blocked | Todo, In Progress, Done, Cancelled |
 | Done | In Progress |
 | Cancelled | Todo |
 
 Moving a story to its current lane makes no change. Every successful state change is recorded in
-project activity.
+project activity. Move a Todo story to Backlog when it is not ready to appear on the normal board;
+move it back to Todo before starting work.
 
 ## Story priority
 
@@ -83,11 +85,13 @@ cursor; the browser board continues to load the complete board.
 
 ## Board views
 
-The toolbar contains four visibility presets:
+The toolbar contains six visibility presets:
 
 | Preset | Visible lanes |
 | --- | --- |
-| All lanes | Todo, In Progress, Blocked, Done, Cancelled |
+| Board | Todo, In Progress, Blocked, Done, Cancelled |
+| Backlog | Backlog only |
+| All lanes | Backlog, Todo, In Progress, Blocked, Done, Cancelled |
 | Work queue | Todo, In Progress, Blocked |
 | Focus | In Progress, Blocked |
 | Delivery | In Progress, Done |
@@ -96,6 +100,7 @@ Open **Customize** to show or hide individual lanes. At least one lane must rema
 remaining columns expand to use the board width. Lane visibility is saved in browser `localStorage`
 under the current project ID. It therefore persists across reloads in that browser but does not
 follow a user to another browser or device. Hiding a lane does not change or delete its stories.
+For a board without saved visibility, Backlog starts hidden.
 
 ## Current limitations
 
